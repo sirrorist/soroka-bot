@@ -1,7 +1,7 @@
 """Database models and initialization."""
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, BigInteger, Text
+from sqlalchemy import Column, Integer, String, Boolean, Date, DateTime, ForeignKey, BigInteger, Text
 from datetime import datetime
 from typing import AsyncGenerator
 
@@ -43,6 +43,37 @@ class Download(Base):
     
     # Relationships
     user = relationship("User", back_populates="downloads")
+
+
+class UserSetting(Base):
+    """Настройки пользователя, которые он выбирает сам. Отдельная таблица, а не
+    столбцы users: миграций нет, create_all добавляет таблицы, но не столбцы."""
+    __tablename__ = "user_settings"
+
+    user_id = Column(BigInteger, primary_key=True)
+    lang = Column(String(8), nullable=True)  # пусто - язык по умолчанию (ru)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Chat(Base):
+    """Группа, где работает бот: лимит и Premium - на чат, а не на участника.
+
+    Новая таблица, а не новые столбцы: миграций нет, а create_all на боевой базе
+    создаёт недостающие таблицы, но не меняет существующие.
+    """
+    __tablename__ = "chats"
+
+    id = Column(BigInteger, primary_key=True)  # id чата в Telegram, у групп отрицательный
+    title = Column(String(255), nullable=True)
+    is_premium = Column(Boolean, default=False)
+    # пусто при is_premium - бессрочно; срок понадобится оплате (этап 11)
+    premium_until = Column(DateTime, nullable=True)
+    # день, к которому относятся счётчики: наступил другой - они обнуляются
+    day = Column(Date, nullable=True)
+    downloads_today = Column(Integer, default=0)
+    bytes_today = Column(BigInteger, default=0)
+    total_downloads = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 # Database engine and session

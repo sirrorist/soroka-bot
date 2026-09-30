@@ -17,3 +17,11 @@ storage/
 *.md
 Dockerfile
 docker-compose.yml
+Docs/
+.claude/
+.github/
+tests/
+*.sql
+*.sql.gz
+*.dump
+moved/

@@ -12,8 +12,29 @@ services:
       - ./temp:/app/temp
       - ./storage:/app/storage
       - ./logs:/app/logs
+    # Только loopback: снаружи webhook доступен через обратный прокси.
+    # Порт, опубликованный Docker на 0.0.0.0, идёт мимо ufw
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
+    # Один пользователь не должен съесть память и процессы всего хоста
+    mem_limit: 1g
+    pids_limit: 256
+    # Права root нужны только entrypoint: отдать каталоги и сбросить root
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       db:
         condition: service_healthy
@@ -21,6 +42,40 @@ services:
         condition: service_healthy
     networks:
       - app-network
+
+  # Старый @tiktubeDownloadBot после переезда в Soroka: на всё отвечает, что бот
+  # переехал (redirect_bot.py). Только по профилю: docker compose --profile moved up -d
+  redirect:
+    build: .
+    container_name: tiktube_redirect_bot
+    restart: unless-stopped
+    profiles: ["moved"]
+    command: ["python", "redirect_bot.py"]
+    environment:
+      - OLD_BOT_TOKEN=${OLD_BOT_TOKEN}
+      - NEW_BOT_USERNAME=${NEW_BOT_USERNAME}
+      - MOVED_PHOTO=/app/moved/moved.png
+    # отдельная папка, а не storage/: entrypoint делает chown -R storage/ и упал бы
+    # на read-only. Нет картинки в ./moved/ - заглушка отвечает только текстом
+    volumes:
+      - ./moved:/app/moved:ro
+    mem_limit: 256m
+    pids_limit: 64
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   db:
     image: postgres:15-alpine
@@ -55,12 +110,15 @@ services:
     networks:
       - app-network
   
+  # Не стартует по умолчанию: `docker compose --profile tools up -d adminer`,
+  # открывать через SSH-туннель (ssh -L 8084:127.0.0.1:8084 ...)
   adminer:
-    image: adminer:4.8.1-standalone
+    image: adminer:6.1.1-standalone
     container_name: tiktube_download_adminer
+    profiles: ["tools"]
     restart: unless-stopped
     ports:
-      - "8084:8080"
+      - "127.0.0.1:8084:8080"
     environment:
       - ADMINER_DEFAULT_SERVER=db
       - ADMINER_DESIGN=nette

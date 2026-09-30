@@ -1,12 +1,15 @@
 """Middleware for the bot."""
 from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
+from loguru import logger
 from aiogram.types import TelegramObject, User as TgUser
 from datetime import datetime
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from database import get_db, User
 from config import settings
+from utils.i18n import DEFAULT_LANG, set_lang
+from utils.lang_store import get_user_lang
 
 
 class UserMiddleware(BaseMiddleware):
@@ -46,7 +49,12 @@ class UserMiddleware(BaseMiddleware):
                 user.first_name = tg_user.first_name
                 user.last_name = tg_user.last_name
                 user.is_premium = tg_user.is_premium or user.is_premium
-                user.last_activity = datetime.utcnow()
+                now = datetime.utcnow()
+                # Сброс дневного счётчика - здесь, до записи last_activity: раньше
+                # RateLimitMiddleware сверял уже обновлённую дату и не сбрасывал никогда
+                if user.last_activity and user.last_activity.date() < now.date():
+                    user.downloads_today = 0
+                user.last_activity = now
                 await session.commit()
             
             # Make attributes persistent before session closes
@@ -74,22 +82,7 @@ class RateLimitMiddleware(BaseMiddleware):
         if not user:
             return await handler(event, data)
         
-        user_id = user.id  # Saving ID
-        
-        # Reset daily counter if needed
-        if user.last_activity and user.last_activity.date() < datetime.utcnow().date():
-            async for session in get_db():
-                await session.execute(
-                    update(User)
-                    .where(User.id == user_id)
-                    .values(downloads_today=0)
-                )
-                await session.commit()
-
-                user.downloads_today = 0
-                break
-        
-        # Check limit
+        # Check limit; дневной счётчик уже сброшен в UserMiddleware
         limit = settings.premium_user_limit if user.is_premium else settings.free_user_limit
         
         if user.downloads_today >= limit:
@@ -97,4 +90,39 @@ class RateLimitMiddleware(BaseMiddleware):
         else:
             data["rate_limited"] = False
         
+        return await handler(event, data)
+
+
+class CommandLogMiddleware(BaseMiddleware):
+    """Пишет в лог каждую команду: какая и в каком чате. Аргументы не пишутся."""
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        text = getattr(event, "text", None) or ""
+        if text.startswith("/"):
+            command = text.split(maxsplit=1)[0][:40]
+            chat = getattr(event, "chat", None)
+            logger.info(f"Command {command} in {chat.type if chat else '?'} chat {chat.id if chat else '?'}")
+        return await handler(event, data)
+
+
+class LangMiddleware(BaseMiddleware):
+    """Язык ответа - тот, что человек выбрал в /language; по умолчанию русский.
+
+    Не по language_code: язык приложения Telegram не говорит, на каком языке
+    человеку удобнее читать бота (слово владельца 2026-09-30).
+    """
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        tg_user = data.get("event_from_user")
+        set_lang(await get_user_lang(tg_user.id) if tg_user else DEFAULT_LANG)
         return await handler(event, data)

@@ -1,11 +1,18 @@
 """Statistics handlers."""
+from html import escape
+
 from aiogram import Router, F, Dispatcher
 from aiogram.filters import Command
 from sqlalchemy import select, func
 
+from config import settings
 from database import get_db, User, Download
+from utils.i18n import t
+from utils.text import bar, download_word, short_name, size_parts
 
 router = Router()
+
+PLATFORM_NAMES = {"tiktok": "TikTok", "youtube": "YouTube", "instagram": "Instagram", "twitter": "X"}
 
 
 def register_stats_handlers(dp: Dispatcher) -> None:
@@ -18,7 +25,7 @@ def register_stats_handlers(dp: Dispatcher) -> None:
 async def show_stats(message_or_query, user: User = None):
     """Show user statistics."""
     if not user:
-        text = "❌ Не удалось загрузить данные пользователя."
+        text = t("stats.load_failed")
         if hasattr(message_or_query, "message"):
             await message_or_query.message.edit_text(text)
             await message_or_query.answer()
@@ -58,31 +65,42 @@ async def show_stats(message_or_query, user: User = None):
         break
     
     total_downloads = stats.total or 0
-    total_size_gb = (stats.total_size or 0) / (1024 * 1024 * 1024)
-    
-    platform_text = "\n".join([
-        f"• {platform}: {count} скачиваний"
-        for platform, count in platforms
-    ]) if platforms else "Нет скачиваний"
-    
-    limit = "∞" if fresh_user.is_premium else f"{fresh_user.downloads_today}/7"
-    
+    today = fresh_user.downloads_today or 0
+    premium = bool(fresh_user.is_premium)
+    limit = settings.premium_user_limit if premium else settings.free_user_limit
+    plan = t("common.premium_plan") if premium else t("common.free_plan")
+
+    # Вид по образцу владельца 2026-09-30: без цитат, жирные заголовки и числа, шкала за день
     text = (
-        f"📊 <b>Ваша статистика</b>\n\n"
-        f"👤 Пользователь: {fresh_user.first_name or 'Неизвестно'}\n"
-        f"⭐ Статус: {'Premium' if fresh_user.is_premium else 'Бесплатный'}\n\n"
-        f"📥 <b>Скачивания:</b>\n"
-        f"• Всего: {total_downloads}\n"
-        f"• Сегодня: {limit}\n"
-        f"• Общий объем: {total_size_gb:.2f} GB\n\n"
-        f"📈 <b>По платформам:</b>\n{platform_text}"
+        f"{t('stats.title')}\n"
+        f"{escape(short_name(fresh_user.first_name))} · {plan}\n\n"
+        f"{t('stats.today')}\n"
+        f"{t('stats.today_line', bar=bar(today, limit), today=today, limit=limit)}\n"
     )
-    
+    if not premium:
+        text += t("stats.left", left=max(limit - today, 0))
+    text += t("common.reset")
+
+    if not total_downloads:
+        text += f"\n\n{t('stats.empty')}"
+    else:
+        size, unit = size_parts(stats.total_size or 0)
+        text += f"\n\n{t('stats.total')}\n" + t(
+            "stats.total_line", count=total_downloads, word=download_word(total_downloads),
+            size=size, unit=unit,
+        )
+        if platforms:
+            lines = "\n".join(
+                f"{PLATFORM_NAMES.get(platform, platform)} - <b>{count}</b>"
+                for platform, count in sorted(platforms, key=lambda p: -p[1])
+            )
+            text += f"\n\n{t('stats.platforms')}\n{lines}"
+
     keyboard = None
     if not fresh_user.is_premium:
         from aiogram.utils.keyboard import InlineKeyboardBuilder
         keyboard = InlineKeyboardBuilder()
-        keyboard.button(text="⭐ Получить Premium", callback_data="premium")
+        keyboard.button(text=t("common.premium_button"), callback_data="premium")
     
     if hasattr(message_or_query, "message"):
         await message_or_query.message.edit_text(

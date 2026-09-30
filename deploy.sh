@@ -16,6 +16,7 @@ docker-compose up -d
 docker-compose exec bot alembic upgrade head
 
 # Clean up old files
-docker-compose exec bot find temp/ -type f -mtime +1 -delete
+# у каждого запроса свой каталог в temp/ - удалять и файлы, и каталоги
+docker-compose exec bot find temp/ -mindepth 1 -mtime +1 -delete
 
 echo "✅ Deployment completed!"

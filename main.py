@@ -1,7 +1,9 @@
-"""Main entry point for the TikTube Download Bot."""
+"""Main entry point for the Soroka bot."""
 import asyncio
+import secrets
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
@@ -10,21 +12,28 @@ from loguru import logger
 from config import settings
 from handlers import register_handlers
 from database import init_db
-from middleware import RateLimitMiddleware, UserMiddleware
+from middleware import CommandLogMiddleware, LangMiddleware, RateLimitMiddleware, UserMiddleware
+from utils.menu import set_default_menus
+
+# Telegram присылает его в заголовке X-Telegram-Bot-Api-Secret-Token, апдейты без
+# него отбрасываются: иначе любой, кто достучался до порта, подделывает апдейты
+WEBHOOK_SECRET = settings.webhook_secret or secrets.token_urlsafe(32)
 
 
 async def on_startup(bot: Bot) -> None:
     """Initialize on bot startup."""
     logger.info("Bot is starting up...")
-    
+
     # Initialize database
     await init_db()
+    await set_default_menus(bot)
     
     # Set webhook if configured
     if settings.webhook_url:
         await bot.set_webhook(
             url=f"{settings.webhook_url}/webhook",
-            drop_pending_updates=True
+            drop_pending_updates=True,
+            secret_token=WEBHOOK_SECRET,
         )
         logger.info(f"Webhook set to {settings.webhook_url}/webhook")
     else:
@@ -60,13 +69,20 @@ async def main():
     setup_logging()
     
     # Initialize bot and dispatcher
+    session = AiohttpSession(proxy=settings.telegram_proxy) if settings.telegram_proxy else None
     bot = Bot(
         token=settings.bot_token,
+        session=session,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
     dp = Dispatcher()
     
     # Register middleware
+    # outer: пишет и те команды, которые ни один обработчик не взял
+    dp.message.outer_middleware(CommandLogMiddleware())
+    # язык - раньше всех: тексты нужны и middleware, и обработчикам
+    dp.message.outer_middleware(LangMiddleware())
+    dp.callback_query.outer_middleware(LangMiddleware())
     dp.message.middleware(UserMiddleware())
     dp.message.middleware(RateLimitMiddleware())
     dp.callback_query.middleware(UserMiddleware())
@@ -84,6 +100,7 @@ async def main():
         webhook_requests_handler = SimpleRequestHandler(
             dispatcher=dp,
             bot=bot,
+            secret_token=WEBHOOK_SECRET,
         )
         webhook_requests_handler.register(app, path="/webhook")
         setup_application(app, dp, bot=bot)

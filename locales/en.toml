@@ -1,0 +1,205 @@
+# Bot texts in English. Keys must match ru.toml; a missing key falls back to Russian.
+# Markup is Telegram HTML: <b>, <i>, <code>, <blockquote>, <a href>.
+# {name} placeholders come from code: do not remove or rename them.
+
+[common]
+not_spent = "<i>This attempt was not counted.</i>"
+reset = "Resets at 00:00 UTC"
+limits_block = """<blockquote>TikTok · YouTube · Instagram · X
+Up to 20 minutes and {max_mb} MB</blockquote>"""
+premium_button = "⭐ Premium"
+free_plan = "free plan"
+premium_plan = "⭐ Premium"
+no_name = "No name"
+cancelled = "Cancelled"
+
+[units]
+mb = "MB"
+gb = "GB"
+hours = "h"
+minutes = "min"
+download_one = "download"
+download_few = "downloads"
+download_many = "downloads"
+
+[menu]
+start = "Start"
+dl = "Download by link"
+stats = "What's used and what's left"
+premium = "About Premium"
+sdate = "Steam hours for two weeks"
+help = "What the bot can do"
+language = "Language / Язык"
+about = "About"
+group_dl = "Download by link"
+group_sdate = "Steam hours for two weeks"
+group_help = "What the bot can do here"
+
+[start]
+text = """👋 <b>Hi!</b> Send me a link to a video and I'll send you the file.
+
+{limits}
+Free - <b>{free} downloads a day</b>. All commands - /help."""
+button_how = "How to download"
+button_stats = "Stats"
+button_help = "Help"
+button_language = "🌐 Language / Язык"
+lang_hint = ""
+
+[help]
+text = """<b>How to download</b>
+Send a link or forward a message that has one.
+Videos up to 20 minutes and {max_mb} MB.
+
+<b>Commands</b>
+<blockquote><code>/dl link</code> - download
+/stats - what's used and what's left
+/premium - about Premium
+<code>/sdate profile</code> - Steam hours for two weeks
+/language - bot language
+/about - about the bot</blockquote>
+
+<b>In groups</b>
+Add the bot to a chat. There it only answers commands starting with <b>{p}</b>:
+<code>/{p}dl link</code>, /{p}help."""
+
+[language]
+choose = """🌐 <b>Bot language</b> · Язык бота
+
+Now - <b>English</b>."""
+button_ru = "🇷🇺 Русский"
+button_en = "🇬🇧 English"
+saved = "✅ Done: I'll speak English now."
+
+[about]
+text = """<b>Soroka</b> downloads videos from TikTok, YouTube, Instagram and X.
+
+Made by sir."""
+
+[download]
+menu = """<b>How to download</b>
+Send a link to a video or forward a message that has one.
+
+{limits}"""
+limit_free = """<b>That's all for today: {free} of {free}</b>
+Resets at 00:00 UTC.
+
+⭐ With Premium - <b>{premium} downloads a day</b>."""
+limit_premium = """<b>That's all for today: {premium} of {premium}</b>
+Resets at 00:00 UTC."""
+unsupported = "I can't download this link. I work with TikTok, YouTube, Instagram and X."
+busy = "⏳ Still downloading your previous link - one moment."
+working = "⏳ Downloading..."
+failed = "Couldn't download: {reason}."
+unknown_reason = "unknown error"
+too_big = "The file is too big: {size} MB, and I can send up to {max_mb} MB."
+crashed = "Something went wrong. Please try again a bit later."
+caption_fallback = "Original on {platform}"
+
+[stats]
+load_failed = "Couldn't load your stats. Please try again."
+title = "<b>📊 Your stats</b>"
+today = "<b>Today:</b>"
+today_line = "{bar} <b>{today}</b> of <b>{limit}</b>"
+left = "<b>{left}</b> left · "
+empty = "Nothing downloaded yet - send me a link."
+total = "<b>All time</b>"
+total_line = "<b>{count}</b> {word} · <b>{size}</b> {unit}"
+platforms = "<b>Platforms</b>"
+
+[premium]
+prices = """<blockquote>Month - <b>{month} ₽</b>
+Year - <b>{year} ₽</b></blockquote>"""
+active = """⭐ <b>You have Premium</b>
+
+Up to <b>{premium} downloads a day</b>. Thank you for supporting the bot!"""
+offer = """⭐ <b>Premium</b>
+
+<b>{premium} downloads a day</b> instead of {free}.
+
+{prices}
+There's no payment in the bot yet: tap the button and I'll pass your request to the admin, who will message you."""
+request_button = "⭐ Get Premium"
+ask = """⚠️ <b>Share your username with the admin?</b>
+
+To set up Premium, I'll pass your Telegram username to the admin - they'll message you and explain how to pay."""
+no_username = "\n\n<blockquote>You don't have a Telegram username, so the admin may not be able to message you first. Set one in Telegram settings and tap again.</blockquote>"
+yes_button = "Yes, share it"
+cancel_button = "Cancel"
+closed = "Requests aren't accepted right now. Please try later."
+already = "Your request is already sent - the admin will message you soon."
+send_failed = "Couldn't send the request. Please try later."
+sent = "✅ <b>Request sent.</b> The admin will contact you soon."
+
+[group]
+help = """<b>What I can do in a group</b>
+I only answer commands starting with <b>{p}</b>. I ignore regular messages and other bots' /start and /help.
+
+<blockquote><code>/{p}dl link</code> - download a video
+<code>/{p}sdate profile</code> - Steam hours for two weeks
+/{p}stats - what the chat downloaded today
+/{p}premium - Premium for the chat</blockquote>
+Reply /{p}dl to a message with a link - no need to copy it."""
+dl_usage = """I need a link: <code>/{p}dl link</code>
+Or reply /{p}dl to a message that has one."""
+not_fits = "The file is {size} and doesn't fit the chat's daily volume - {left} left."
+limit = """<b>The chat's limit for today is used up</b> - {downloads} or {size}.
+Resets at 00:00 UTC."""
+limit_upsell = "\n\n⭐ Premium for the chat: /{p}premium"
+stats_title = "<b>📊 Chat stats</b>"
+stats_downloads = "{bar} <b>{today}</b> of <b>{limit}</b> {word}"
+stats_bytes = "{bar} <b>{used}</b> of <b>{daily}</b>"
+stats_total_line = "<b>{count}</b> {word}"
+premium_active = "⭐ <b>This chat has Premium</b>"
+premium_until = "\n\nValid until <b>{date}</b>."
+premium_offer = """⭐ <b>Premium for the chat</b>
+
+<blockquote>Now for the whole chat: {free_downloads} and {free_size} a day
+With Premium: <b>{downloads} and {size} a day</b></blockquote>
+{prices}
+Chat Premium is paid separately from personal Premium and works only here.
+There's no payment in the bot yet: tap the button and the request goes to the admin, who will message you."""
+
+[steam]
+usage = """🎮 <b>Steam hours for two weeks</b>
+<code>/{command} profile</code>
+
+<blockquote>Profile is a steamcommunity.com link, a SteamID64 or the name from steamcommunity.com/id/<b>name</b></blockquote>
+The profile and its game details must be public."""
+closed = "🔒 <b>{name}</b>: the profile is private - Steam doesn't show its games."
+empty = "🎮 <b>{name}</b>: no games in the last two weeks - either nothing was played or game details are hidden in privacy settings."
+result = """<b>🎮 {name}</b>
+<b>{total}</b> in Steam over two weeks
+
+<blockquote>{games}</blockquote>"""
+more = "\n<i>and {count} more games</i>"
+unavailable = "This command isn't available right now."
+cooldown = "Not so often - try again in {seconds} seconds."
+failed = "Couldn't find out. Please try later."
+error_status = "Steam didn't answer (error {status}). Please try later."
+error_timeout = "Steam didn't answer. Please try later."
+error_parse = "I can't tell whose profile this is. I need a steamcommunity.com link, a SteamID64 or the name from the link."
+error_not_found = "Couldn't find this profile. Check the link or the name."
+
+# Download failure reasons: go after the colon in download.failed,
+# so lowercase and without a final period
+[errors]
+too_big = "the file is bigger than {mb} MB"
+too_slow = "the download took too long"
+generic_limits = "the video is longer than 20 minutes or bigger than 50 MB"
+platform_failed = "the platform didn't give the video - try another link"
+yt_no_info = "YouTube didn't return data for this video, try later"
+yt_live = "this is a live stream, it can't be downloaded"
+yt_post_live = "the stream has just ended - try in 5-10 minutes, YouTube is still processing it"
+yt_upcoming = "the video isn't available yet: the stream hasn't started or YouTube is still processing it"
+yt_no_formats = "the video is private, deleted or blocked in our region"
+yt_too_long = "the video is {minutes} min long, and the limit is 20"
+yt_no_file = "couldn't get the file, try again"
+yt_unavailable_many = "the video isn't available: it's private, deleted, region-blocked or a live stream"
+yt_blocked = "YouTube is temporarily not giving videos - try in a couple of minutes"
+yt_unavailable = "the video is unavailable or deleted"
+yt_private = "the video is private"
+yt_age = "the video is age-restricted - I can't download those"
+yt_failed = "YouTube didn't give this video - try later"
+yt_parse = "couldn't read YouTube's answer - try another link"
+yt_unknown = "something went wrong, try later"

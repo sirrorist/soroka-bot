@@ -1,11 +1,15 @@
 # Telegram Bot Configuration
 BOT_TOKEN=your_bot_token_here
 BOT_USERNAME=your_bot_username
+# Только там, где Telegram напрямую недоступен: http://... или socks5://...
+# Нужен пакет aiohttp-socks (есть в requirements-dev.txt, в образе нет)
+TELEGRAM_PROXY=
 
 # Database
 DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/content_downloader
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
+# Свой длинный пароль, например: openssl rand -hex 24. Тот же - в DATABASE_URL
+POSTGRES_PASSWORD=
 POSTGRES_DB=content_downloader
 
 # Redis
@@ -17,10 +21,25 @@ LOG_LEVEL=INFO
 MAX_FILE_SIZE_MB=100
 TEMP_DIR=./temp
 STORAGE_DIR=./storage
+# Одно скачивание дольше этого обрывается; одновременно качается не больше N
+DOWNLOAD_TIMEOUT_S=300
+MAX_PARALLEL_DOWNLOADS=3
 
 # Rate Limiting
 FREE_USER_LIMIT=7
 PREMIUM_USER_LIMIT=1000
+# Группы: лимит на весь чат. Premium чата - PREMIUM_USER_LIMIT скачиваний
+GROUP_FREE_LIMIT=10
+GROUP_FREE_DAILY_MB=350
+GROUP_PREMIUM_DAILY_MB=5120
+
+# Команды бота в группе - только с этим префиксом (a-z, 0-9, "_")
+GROUP_COMMAND_PREFIX=sr_
+# id владельца в Telegram: сюда бот шлёт заявки на Premium
+ADMIN_ID=
+
+# /sdate: ключ Steam Web API, https://steamcommunity.com/dev/apikey
+STEAM_API_KEY=
 
 # API Keys (optional, для некоторых платформ)
 TWITTER_API_KEY=
@@ -32,6 +51,8 @@ INSTAGRAM_PASSWORD=
 HOST=0.0.0.0
 PORT=8001
 WEBHOOK_URL=https://yourdomain.com/webhook
+# Необязательно: пусто - бот придумывает секрет сам при каждом запуске
+WEBHOOK_SECRET=
 
 # Monitoring
 SENTRY_DSN=

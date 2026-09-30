@@ -1,12 +1,13 @@
 """YouTube downloader with automatic PO Token management."""
-import os
+import asyncio
 from pathlib import Path
 
 from loguru import logger
 
-from config import settings
 from utils.po_token_cache import POTokenCache
 from downloaders.po_token_manager import POTokenGenerator
+from utils.i18n import t
+from downloaders.common import find_file, new_workdir, remove_workdir, user_reason, ydl_limits
 
 
 # Инициализация менеджера токенов (глобально)
@@ -47,12 +48,27 @@ def _get_po_token(client: str = "android") -> str:
 
 
 async def download_youtube_video(url: str) -> dict[str, any]:
-    """Download YouTube video or audio with automatic PO Token."""
+    """Download YouTube video or audio with automatic PO Token.
+
+    yt-dlp и генератор PO Token синхронные - в отдельном потоке, чтобы не держать бота.
+    """
+    return await asyncio.to_thread(_download_sync, url)
+
+
+def _download_sync(url: str) -> dict[str, any]:
+    workdir = new_workdir("youtube")
+    result = _download_into(url, workdir)
+    if not result.get("success"):
+        remove_workdir(workdir)
+    return result
+
+
+def _download_into(url: str, workdir: Path) -> dict[str, any]:
     try:
         import yt_dlp
 
-        output_dir = Path(settings.temp_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # один срок и один лимит размера на оба прохода: сведения и скачивание
+        limits = ydl_limits(workdir, "youtube", max_mb=50)
 
         # Автоматически получаем актуальный PO Token
         po_token_android = _get_po_token("android")
@@ -73,6 +89,7 @@ async def download_youtube_video(url: str) -> dict[str, any]:
                 "User-Agent": "com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip",
                 "Accept-Language": "en-US,en;q=0.9",
             },
+            **limits,
         }
 
         # Добавляем PO Token если есть
@@ -87,7 +104,7 @@ async def download_youtube_video(url: str) -> dict[str, any]:
             if not info:
                 return {
                     "success": False,
-                    "error": "Не удалось получить информацию о видео",
+                    "error": t("errors.yt_no_info"),
                 }
 
             # Проверка: Прямая трансляция запрещена
@@ -98,14 +115,13 @@ async def download_youtube_video(url: str) -> dict[str, any]:
             if is_live or live_status == "is_live":
                 return {
                     "success": False,
-                    "error": "❌ Прямые трансляции не поддерживаются.",
+                    "error": t("errors.yt_live"),
                 }
             
             if live_status == "post_live":
                 return {
                     "success": False,
-                    "error": "⏳ Трансляция только что закончилась.\n\n"
-                             "Подождите 5-10 минут, пока YouTube обработает видео.",
+                    "error": t("errors.yt_post_live"),
                 }
 
             # Доп проверка: Доступность форматов
@@ -114,20 +130,12 @@ async def download_youtube_video(url: str) -> dict[str, any]:
                 if was_live or info.get("is_upcoming"):
                     return {
                         "success": False,
-                        "error": "❌ Видео пока недоступно для скачивания.\n\n"
-                                 "Возможные причины:\n"
-                                 "• Трансляция ещё не началась\n"
-                                 "• Трансляция только что закончилась (подождите 5-10 мин)\n"
-                                 "• Видео обрабатывается YouTube",
+                        "error": t("errors.yt_upcoming"),
                     }
                 else:
                     return {
                         "success": False,
-                        "error": "❌ Форматы видео недоступны.\n\n"
-                                 "Видео может быть:\n"
-                                 "• Приватным\n"
-                                 "• Удалённым\n"
-                                 "• С ограничениями региона",
+                        "error": t("errors.yt_no_formats"),
                     }
 
             # Проверка длительности (лимит 20 минут)
@@ -135,7 +143,7 @@ async def download_youtube_video(url: str) -> dict[str, any]:
             if duration > 1200:  # 20 минут
                 return {
                     "success": False,
-                    "error": f"Видео слишком длинное ({duration // 60} мин). Максимум: 20 минут",
+                    "error": t("errors.yt_too_long", minutes=duration // 60),
                 }
 
             # Определение: Музыка или видео?
@@ -146,7 +154,6 @@ async def download_youtube_video(url: str) -> dict[str, any]:
                 # Для музыки
                 ydl_opts = {
                     "format": "bestaudio/best",
-                    "outtmpl": str(output_dir / "youtube_audio_%(id)s.%(ext)s"),
                     "postprocessors": [
                         {
                             "key": "FFmpegExtractAudio",
@@ -164,7 +171,6 @@ async def download_youtube_video(url: str) -> dict[str, any]:
                 ydl_opts = {
                     # Используем комбинированные форматы или fallback на best
                     "format": "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]/b[height<=720]/best",
-                    "outtmpl": str(output_dir / "youtube_video_%(id)s.%(ext)s"),
                     "merge_output_format": "mp4",
                 }
                 content_type = "video"
@@ -197,10 +203,9 @@ async def download_youtube_video(url: str) -> dict[str, any]:
                     "retries": 10,
                     "fragment_retries": 10,
                     "skip_unavailable_fragments": True,
-                    "max_filesize": 50 * 1024 * 1024,
-                    "nocheckcertificate": True,
                     "prefer_free_formats": True,
                     "geo_bypass": True,
+                    **limits,
                 }
             )
 
@@ -213,24 +218,18 @@ async def download_youtube_video(url: str) -> dict[str, any]:
 
             # Скачиваем контент
             with yt_dlp.YoutubeDL(ydl_opts) as ydl_download:
-                info_downloaded = ydl_download.extract_info(url, download=True)
-                filename = ydl_download.prepare_filename(info_downloaded)
+                ydl_download.extract_info(url, download=True)
 
-                # Для аудио: после обработки расширение меняется на .mp3
-                if is_music:
-                    # Ищем файл с расширением .mp3
-                    base_name = os.path.splitext(filename)[0]
-                    mp3_file = f"{base_name}.mp3"
-                    if os.path.exists(mp3_file):
-                        filename = mp3_file
+                # Имя после постобработки (mp3, склейка в mp4) заранее не известно:
+                # в каталоге запроса лежит только этот файл
+                file = find_file(workdir)
+                if not file:
+                    return {"success": False, "error": t("errors.yt_no_file")}
 
-                # Проверяем что файл существует и не пустой
-                if not os.path.exists(filename):
-                    return {"success": False, "error": "Файл не был скачан"}
-
-                file_size = os.path.getsize(filename)
+                filename = str(file)
+                file_size = file.stat().st_size
                 if file_size == 0:
-                    return {"success": False, "error": "Скачанный файл пустой"}
+                    return {"success": False, "error": t("errors.yt_no_file")}
 
                 # Формируем красивое название
                 title = info.get("title", "YouTube Content")
@@ -255,12 +254,7 @@ async def download_youtube_video(url: str) -> dict[str, any]:
         if "No video formats found" in error_msg or "no formats found" in error_msg.lower():
             return {
                 "success": False,
-                "error": "❌ Видео недоступно для скачивания.\n\n"
-                         "Возможные причины:\n"
-                         "• Это прямая трансляция (дождитесь окончания)\n"
-                         "• Трансляция только что закончилась (подождите 5-10 мин)\n"
-                         "• Приватное видео или удалено\n"
-                         "• Ограничения по региону",
+                "error": t("errors.yt_unavailable_many"),
             }
         
         if "HTTP Error 403" in error_msg or "Forbidden" in error_msg:
@@ -268,31 +262,28 @@ async def download_youtube_video(url: str) -> dict[str, any]:
             _po_token_cache.clear_token("android")
             return {
                 "success": False,
-                "error": "⚠️ YouTube временно ограничил доступ. Попробуйте:\n"
-                "1. Подождать 1-2 минуты\n"
-                "2. Использовать другую ссылку\n"
-                "3. Скопировать ссылку заново",
+                "error": t("errors.yt_blocked"),
             }
         elif "Video unavailable" in error_msg:
-            return {"success": False, "error": "❌ Видео недоступно или удалено"}
+            return {"success": False, "error": t("errors.yt_unavailable")}
         elif "Private video" in error_msg:
-            return {"success": False, "error": "❌ Это приватное видео"}
+            return {"success": False, "error": t("errors.yt_private")}
         elif "Sign in to confirm your age" in error_msg:
             return {
                 "success": False,
-                "error": "❌ Видео с возрастным ограничением. Скачивание недоступно.",
+                "error": t("errors.yt_age"),
             }
         else:
-            return {"success": False, "error": f"⚠️ Ошибка YouTube: {error_msg[:200]}"}
+            return {"success": False, "error": user_reason(e, t("errors.yt_failed"), "youtube")}
     except AttributeError:
         return {
             "success": False,
-            "error": "⚠️ Ошибка обработки данных видео. Попробуйте другую ссылку.",
+            "error": t("errors.yt_parse"),
         }
     except Exception as e:
         return {
             "success": False,
-            "error": f"⚠️ Неизвестная ошибка: {str(e)[:200]}",
+            "error": user_reason(e, t("errors.yt_unknown"), "youtube"),
         }
 
 

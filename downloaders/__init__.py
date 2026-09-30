@@ -1,28 +1,15 @@
 """Downloaders package."""
-import re
-
+from .common import extract_url
 from .tiktok import download_tiktok_video
 from .youtube import download_youtube_video
 from .instagram import download_instagram_content
 from .twitter import download_twitter_content
 
-URL_PATTERNS = {
-    "tiktok": r"(?:https?://)?(?:www\.)?(?:tiktok\.com|vm\.tiktok\.com)",
-    "youtube": r"(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)",
-    "instagram": r"(?:https?://)?(?:www\.)?instagram\.com",
-    "twitter": r"(?:https?://)?(?:www\.)?(?:twitter\.com|x\.com)",
-    "reddit": r"(?:https?://)?(?:www\.)?reddit\.com",
-    "pinterest": r"(?:https?://)?(?:www\.)?pinterest\.com",
-}
-
 
 def detect_platform(url: str) -> str | None:
     """Detect platform from URL."""
-    url_lower = url.lower()
-    for platform, pattern in URL_PATTERNS.items():
-        if re.search(pattern, url_lower):
-            return platform
-    return None
+    found = extract_url(url)
+    return found[0] if found else None
 
 
 async def download_tiktok(url: str) -> dict[str, any]:

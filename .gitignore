@@ -50,7 +50,16 @@ storage/
 .DS_Store
 Thumbs.db
 
-# Database
+# Database. Дампы - тоже: в них пользователи, а main уезжает в публичное зеркало
 *.db
 *.sqlite
 *.sqlite3
+*.sql
+*.sql.gz
+*.dump
+
+# Test cache
+.pytest_cache/
+
+# Картинка для бота-заглушки после переезда - кладётся на сервере руками
+moved/

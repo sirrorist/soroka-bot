@@ -29,7 +29,7 @@ def check_env_file():
 
 
 if __name__ == "__main__":
-    print("Setting up TikTube Download Bot...")
+    print("Setting up Soroka bot...")
     create_directories()
     check_env_file()
     print("\n[OK] Setup complete!")

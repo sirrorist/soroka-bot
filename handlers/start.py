@@ -1,8 +1,12 @@
-"""Start command handlers."""
-from aiogram import Router, F, Dispatcher
-from aiogram.types import Message
+"""Start command handlers. Тексты - в locales/."""
+from aiogram import Dispatcher, F, Router
 from aiogram.filters import Command, CommandStart
+from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+from config import settings
+from downloaders.common import max_send_mb
+from utils.i18n import DEFAULT_LANG, get_lang, lang_for, t
 
 router = Router()
 
@@ -16,23 +20,21 @@ def register_start_handlers(dp: Dispatcher) -> None:
 async def cmd_start(message: Message):
     """Handle /start command."""
     keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="📥 Скачать контент", callback_data="download_menu")
-    keyboard.button(text="📊 Статистика", callback_data="stats")
-    keyboard.button(text="⭐ Premium", callback_data="premium")
-    keyboard.button(text="ℹ️ Помощь", callback_data="help")
-    keyboard.adjust(2)
-    
-    text = (
-        "👋 <b>Добро пожаловать в Content Downloader Bot!</b>\n\n"
-        "Я помогу вам скачать:\n"
-        "• 🎥 Видео из TikTok, YouTube, Instagram\n"
-        "• 📸 Фото из Instagram, Pinterest\n"
-        "• 📝 Тексты из X.com, Reddit\n\n"
-        "Просто отправьте мне ссылку на контент!\n\n"
-        "💡 <i>Бесплатно: 7 скачиваний в день (сейчас - безлимит)</i>\n"
-        "⭐ <i>Premium: безлимит</i>"
+    keyboard.button(text=t("start.button_how"), callback_data="download_menu")
+    keyboard.button(text=t("start.button_stats"), callback_data="stats")
+    keyboard.button(text=t("common.premium_button"), callback_data="premium")
+    keyboard.button(text=t("start.button_help"), callback_data="help")
+    keyboard.button(text=t("start.button_language"), callback_data="language")
+    keyboard.adjust(2, 2, 1)
+
+    text = t(
+        "start.text",
+        limits=t("common.limits_block", max_mb=max_send_mb()),
+        free=settings.free_user_limit,
     )
-    
+    # по умолчанию бот русский; тем, у кого Telegram на другом языке, - как переключить
+    if get_lang() == DEFAULT_LANG and lang_for(message.from_user and message.from_user.language_code) != DEFAULT_LANG:
+        text += t("start.lang_hint")
     await message.answer(text, reply_markup=keyboard.as_markup())
 
 
@@ -40,26 +42,8 @@ async def cmd_start(message: Message):
 @router.callback_query(F.data == "help")
 async def cmd_help(message_or_query):
     """Handle /help command."""
-    text = (
-        "📖 <b>Как использовать бота:</b>\n\n"
-        "1️⃣ Отправьте ссылку на контент (TikTok, YouTube, Instagram, X.com и т.д.)\n"
-        "2️⃣ Бот автоматически определит платформу\n"
-        "3️⃣ Выберите формат (видео/фото/текст)\n"
-        "4️⃣ Получите файл!\n\n"
-        "<b>Поддерживаемые платформы:</b>\n"
-        "• TikTok\n"
-        "• YouTube\n"
-        "• Instagram\n"
-        "• X.com (Twitter)\n"
-        "• Reddit\n"
-        "• Pinterest\n\n"
-        "<b>Команды:</b>\n"
-        "/start - Главное меню\n"
-        "/stats - Ваша статистика\n"
-        "/premium - Информация о Premium\n"
-        "/help - Эта справка"
-    )
-    
+    text = t("help.text", max_mb=max_send_mb(), p=settings.group_command_prefix)
+
     if hasattr(message_or_query, "message"):
         await message_or_query.message.edit_text(text)
         await message_or_query.answer()
@@ -70,16 +54,4 @@ async def cmd_help(message_or_query):
 @router.message(Command("about"))
 async def cmd_about(message: Message):
     """Handle /about command."""
-    text = (
-        "ℹ️ <b>О боте</b>\n\n"
-        "Версия: 1.0.0\n"
-        "Разработчик: @sir_yessir\n\n"
-        "Этот бот создан для удобного скачивания контента "
-        "из популярных социальных сетей.\n\n"
-        "Используются современные технологии:\n"
-        "• Python 3.11\n"
-        "• aiogram 3.4.1\n"
-        "• yt-dlp\n"
-        "• FastAPI\n"
-    )
-    await message.answer(text)
+    await message.answer(t("about.text"))

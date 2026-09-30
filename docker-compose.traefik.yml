@@ -1,0 +1,31 @@
+# Webhook через traefik: добавка к docker-compose.yml для сервера, где traefik
+# работает в контейнере и находит бота по меткам в docker-сети.
+#
+# Включается в .env на сервере, без правки основного compose:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.traefik.yml
+#   BOT_DOMAIN=<домен из WEBHOOK_URL, без https://>
+#   TRAEFIK_ENTRYPOINT=<entrypoint HTTPS в настройках traefik>
+#   TRAEFIK_CERT_RESOLVER=<certResolver в настройках traefik>
+# Значения - только в .env сервера: в репозитории (и в публичном зеркале) их нет.
+#
+# Сеть soroka_edge - только traefik и бот, а не общая сеть traefik со всеми сайтами
+# сервера: там бот видел бы чужие контейнеры, а они - его порт 8001 в обход traefik
+# (находка security-reviewer 2026-09-30). Сеть создаётся на сервере заранее, traefik
+# подключается к ней в своём compose - commands.md#выкладка-за-traefik.
+services:
+  bot:
+    networks:
+      - app-network
+      - soroka_edge
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=soroka_edge"
+      - "traefik.http.routers.soroka.rule=Host(`${BOT_DOMAIN:?BOT_DOMAIN не задан в .env}`)"
+      - "traefik.http.routers.soroka.entrypoints=${TRAEFIK_ENTRYPOINT:?TRAEFIK_ENTRYPOINT не задан в .env}"
+      - "traefik.http.routers.soroka.tls=true"
+      - "traefik.http.routers.soroka.tls.certResolver=${TRAEFIK_CERT_RESOLVER:?TRAEFIK_CERT_RESOLVER не задан в .env}"
+      - "traefik.http.services.soroka.loadbalancer.server.port=8001"
+
+networks:
+  soroka_edge:
+    external: true

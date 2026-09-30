@@ -1,0 +1,11 @@
+# Только для разработки и CI, в образ не ставится
+-r requirements.txt
+
+pytest
+pytest-asyncio
+ruff
+psycopg2-binary
+# TELEGRAM_PROXY на машине разработки; aiogram без него прокси не принимает
+aiohttp-socks
+# тесты с настоящей базой (фикстура db в tests/conftest.py) - SQLite
+aiosqlite
