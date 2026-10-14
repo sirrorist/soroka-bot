@@ -1,14 +1,21 @@
 """YouTube downloader with automatic PO Token management."""
+
 import asyncio
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
-from utils.po_token_cache import POTokenCache
+from downloaders.common import (
+    find_file,
+    new_workdir,
+    remove_workdir,
+    user_reason,
+    ydl_limits,
+)
 from downloaders.po_token_manager import POTokenGenerator
 from utils.i18n import t
-from downloaders.common import find_file, new_workdir, remove_workdir, user_reason, ydl_limits
-
+from utils.po_token_cache import POTokenCache
 
 # Инициализация менеджера токенов (глобально)
 _po_token_cache = POTokenCache(cache_file="storage/po_token_cache.json")
@@ -41,13 +48,11 @@ def _get_po_token(client: str = "android") -> str:
         return new_token
     else:
         # Fallback - работаем без токена
-        logger.warning(
-            f"Failed to generate PO Token for {client}, using fallback"
-        )
+        logger.warning(f"Failed to generate PO Token for {client}, using fallback")
         return POTokenGenerator.generate_fallback()
 
 
-async def download_youtube_video(url: str) -> dict[str, any]:
+async def download_youtube_video(url: str) -> dict[str, Any]:
     """Download YouTube video or audio with automatic PO Token.
 
     yt-dlp и генератор PO Token синхронные - в отдельном потоке, чтобы не держать бота.
@@ -55,7 +60,7 @@ async def download_youtube_video(url: str) -> dict[str, any]:
     return await asyncio.to_thread(_download_sync, url)
 
 
-def _download_sync(url: str) -> dict[str, any]:
+def _download_sync(url: str) -> dict[str, Any]:
     workdir = new_workdir("youtube")
     result = _download_into(url, workdir)
     if not result.get("success"):
@@ -63,7 +68,7 @@ def _download_sync(url: str) -> dict[str, any]:
     return result
 
 
-def _download_into(url: str, workdir: Path) -> dict[str, any]:
+def _download_into(url: str, workdir: Path) -> dict[str, Any]:
     try:
         import yt_dlp
 
@@ -117,7 +122,7 @@ def _download_into(url: str, workdir: Path) -> dict[str, any]:
                     "success": False,
                     "error": t("errors.yt_live"),
                 }
-            
+
             if live_status == "post_live":
                 return {
                     "success": False,
@@ -249,14 +254,17 @@ def _download_into(url: str, workdir: Path) -> dict[str, any]:
 
     except yt_dlp.utils.DownloadError as e:
         error_msg = str(e)
-        
+
         # Специфичная обработка ошибки "No video formats found"
-        if "No video formats found" in error_msg or "no formats found" in error_msg.lower():
+        if (
+            "No video formats found" in error_msg
+            or "no formats found" in error_msg.lower()
+        ):
             return {
                 "success": False,
                 "error": t("errors.yt_unavailable_many"),
             }
-        
+
         if "HTTP Error 403" in error_msg or "Forbidden" in error_msg:
             # Возможно токен истёк - очищаем кэш
             _po_token_cache.clear_token("android")
@@ -274,7 +282,10 @@ def _download_into(url: str, workdir: Path) -> dict[str, any]:
                 "error": t("errors.yt_age"),
             }
         else:
-            return {"success": False, "error": user_reason(e, t("errors.yt_failed"), "youtube")}
+            return {
+                "success": False,
+                "error": user_reason(e, t("errors.yt_failed"), "youtube"),
+            }
     except AttributeError:
         return {
             "success": False,
@@ -337,14 +348,14 @@ def _is_music_content(info: dict) -> bool:
     # Проверка 4: Канал музыкальный
     uploader = info.get("uploader")
     channel_id = info.get("channel_id")
-    
+
     if uploader:
         uploader_lower = str(uploader).lower()
         music_channels = ["vevo", "official", " - topic", "records", "music"]
-        
+
         if any(marker in uploader_lower for marker in music_channels):
             return True
-        
+
         # YouTube Music обычно добавляет " - Topic" к названиям каналов
         if channel_id and "topic" in uploader_lower:
             return True

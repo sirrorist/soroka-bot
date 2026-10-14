@@ -1,18 +1,24 @@
 """Statistics handlers."""
+
 from html import escape
 
-from aiogram import Router, F, Dispatcher
+from aiogram import Dispatcher, F, Router
 from aiogram.filters import Command
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
 from config import settings
-from database import get_db, User, Download
+from database import Download, User, session_scope
 from utils.i18n import t
 from utils.text import bar, download_word, short_name, size_parts
 
 router = Router()
 
-PLATFORM_NAMES = {"tiktok": "TikTok", "youtube": "YouTube", "instagram": "Instagram", "twitter": "X"}
+PLATFORM_NAMES = {
+    "tiktok": "TikTok",
+    "youtube": "YouTube",
+    "instagram": "Instagram",
+    "twitter": "X",
+}
 
 
 def register_stats_handlers(dp: Dispatcher) -> None:
@@ -32,38 +38,32 @@ async def show_stats(message_or_query, user: User = None):
         else:
             await message_or_query.answer(text)
         return
-    
+
     # user detached, get user ID
     user_id = user.id
-    
-    async for session in get_db():
+
+    async with session_scope() as session:
         # Load user again to get fresh data
-        user_result = await session.execute(
-            select(User).where(User.id == user_id)
-        )
+        user_result = await session.execute(select(User).where(User.id == user_id))
         fresh_user = user_result.scalar_one()
-        
+
         # Get download statistics
         result = await session.execute(
             select(
                 func.count(Download.id).label("total"),
-                func.sum(Download.file_size).label("total_size")
+                func.sum(Download.file_size).label("total_size"),
             ).where(Download.user_id == user_id)
         )
         stats = result.first()
-        
+
         # Get platform breakdown
         platform_stats = await session.execute(
-            select(
-                Download.platform,
-                func.count(Download.id).label("count")
-            )
+            select(Download.platform, func.count(Download.id).label("count"))
             .where(Download.user_id == user_id)
             .group_by(Download.platform)
         )
         platforms = platform_stats.all()
-        break
-    
+
     total_downloads = stats.total or 0
     today = fresh_user.downloads_today or 0
     premium = bool(fresh_user.is_premium)
@@ -86,8 +86,11 @@ async def show_stats(message_or_query, user: User = None):
     else:
         size, unit = size_parts(stats.total_size or 0)
         text += f"\n\n{t('stats.total')}\n" + t(
-            "stats.total_line", count=total_downloads, word=download_word(total_downloads),
-            size=size, unit=unit,
+            "stats.total_line",
+            count=total_downloads,
+            word=download_word(total_downloads),
+            size=size,
+            unit=unit,
         )
         if platforms:
             lines = "\n".join(
@@ -99,17 +102,16 @@ async def show_stats(message_or_query, user: User = None):
     keyboard = None
     if not fresh_user.is_premium:
         from aiogram.utils.keyboard import InlineKeyboardBuilder
+
         keyboard = InlineKeyboardBuilder()
         keyboard.button(text=t("common.premium_button"), callback_data="premium")
-    
+
     if hasattr(message_or_query, "message"):
         await message_or_query.message.edit_text(
-            text,
-            reply_markup=keyboard.as_markup() if keyboard else None
+            text, reply_markup=keyboard.as_markup() if keyboard else None
         )
         await message_or_query.answer()
     else:
         await message_or_query.answer(
-            text,
-            reply_markup=keyboard.as_markup() if keyboard else None
+            text, reply_markup=keyboard.as_markup() if keyboard else None
         )

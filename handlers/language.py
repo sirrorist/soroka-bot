@@ -1,4 +1,5 @@
 """/language - выбор языка бота. По умолчанию русский, выбор запоминается."""
+
 from aiogram import Dispatcher, F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery
@@ -29,7 +30,9 @@ def _keyboard():
 async def cmd_language(message_or_query):
     """Показать выбор языка."""
     if isinstance(message_or_query, CallbackQuery):
-        await message_or_query.message.edit_text(t("language.choose"), reply_markup=_keyboard())
+        await message_or_query.message.edit_text(
+            t("language.choose"), reply_markup=_keyboard()
+        )
         await message_or_query.answer()
     else:
         await message_or_query.answer(t("language.choose"), reply_markup=_keyboard())

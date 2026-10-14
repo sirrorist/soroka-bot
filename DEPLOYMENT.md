@@ -74,6 +74,9 @@ sudo certbot --nginx -d domain.name
 # Установка зависимостей
 pip install -r requirements.txt
 
+# Таблицы базы данных - миграциями; бот без них не запустится
+alembic upgrade head
+
 # Запуск
 python main.py
 ```
@@ -81,7 +84,9 @@ python main.py
 ### Продакшн (Docker)
 
 ```bash
-# Сборка и запуск
+# Сборка, таблицы базы данных, запуск
+docker-compose build
+docker-compose run --rm bot alembic upgrade head
 docker-compose up -d
 
 # Просмотр логов
@@ -97,9 +102,9 @@ docker-compose down
 # Обновление кода
 git pull origin main
 
-# Пересборка и перезапуск
-docker-compose down
+# Пересборка, миграции, перезапуск (старый бот работает до последней строки)
 docker-compose build --no-cache
+docker-compose run --rm bot alembic upgrade head
 docker-compose up -d
 
 # Очистка старых файлов

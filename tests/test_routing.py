@@ -10,6 +10,7 @@ attached". Ту же register_handlers зовёт main.main(), которую г
 поэтому фикстура dp отцепляет роутеры и перед собой (вдруг их уже занял другой тест),
 и после себя. Без этого набор красный в одном из двух порядков.
 """
+
 import datetime
 
 import pytest
@@ -18,7 +19,16 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import CallbackQuery, Chat, Message, Update
 from aiogram.types import User as TgUser
 
-from handlers import download, group, language, premium, register_handlers, start, stats, steam
+from handlers import (
+    download,
+    group,
+    language,
+    premium,
+    register_handlers,
+    start,
+    stats,
+    steam,
+)
 
 PRIVATE = Chat(id=1, type="private")
 GROUP = Chat(id=-100, type="group", title="g")
@@ -112,13 +122,27 @@ GROUP_PREFIXED = [
 ]
 
 GROUP_SILENT = [
-    "/start", "/help", "/about", "/download", "/stats", "/premium", "/language",
-    "/sdate x", f"/dl {LINK}", LINK, "просто текст", "", "/nonsense",
+    "/start",
+    "/help",
+    "/about",
+    "/download",
+    "/stats",
+    "/premium",
+    "/language",
+    "/sdate x",
+    f"/dl {LINK}",
+    LINK,
+    "просто текст",
+    "",
+    "/nonsense",
     f"смотрите {LINK}",
     # префикс есть, но команды с таким именем нет
-    "/sr_start", "/sr_about", "/sr_language",
+    "/sr_start",
+    "/sr_about",
+    "/sr_language",
     # префикс не в начале команды - не наша
-    f"/x_sr_dl {LINK}", f"sr_dl {LINK}",
+    f"/x_sr_dl {LINK}",
+    f"sr_dl {LINK}",
 ]
 
 
@@ -145,7 +169,9 @@ async def test_group_command_addressed_to_another_bot_is_ignored(dp, bot):
 @pytest.mark.asyncio
 async def test_group_command_addressed_to_this_bot_is_taken(dp, bot):
     assert await route(dp, bot, SUPERGROUP, "/sr_help@soroka_bot") == ["group_help"]
-    assert await route(dp, bot, SUPERGROUP, f"/sr_dl@soroka_bot {LINK}") == ["group_download"]
+    assert await route(dp, bot, SUPERGROUP, f"/sr_dl@soroka_bot {LINK}") == [
+        "group_download"
+    ]
 
 
 @pytest.mark.asyncio
@@ -163,7 +189,9 @@ async def test_migrate_to_service_message_goes_to_migration_handler(dp, bot):
 
 @pytest.mark.asyncio
 async def test_migrate_from_service_message_goes_to_migration_handler(dp, bot):
-    assert await route(dp, bot, SUPERGROUP, migrate_from_chat_id=-100) == ["on_migrate_from"]
+    assert await route(dp, bot, SUPERGROUP, migrate_from_chat_id=-100) == [
+        "on_migrate_from"
+    ]
 
 
 @pytest.mark.asyncio
@@ -176,9 +204,14 @@ async def test_migrate_service_message_in_private_chat_is_not_taken(dp, bot):
 
 async def press(dp, bot, chat, data):
     hits.clear()
-    msg = Message(message_id=1, date=datetime.datetime(2026, 1, 1), chat=chat, text="меню")
+    msg = Message(
+        message_id=1, date=datetime.datetime(2026, 1, 1), chat=chat, text="меню"
+    )
     cb = CallbackQuery(
-        id="1", chat_instance="x", data=data, message=msg,
+        id="1",
+        chat_instance="x",
+        data=data,
+        message=msg,
         from_user=TgUser(id=1, is_bot=False, first_name="t"),
     )
     await dp.feed_update(bot, Update(update_id=1, callback_query=cb))

@@ -1,10 +1,9 @@
 """PO Token generator for YouTube downloads."""
 
-import subprocess
 import json
+import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 from loguru import logger
 
@@ -13,7 +12,7 @@ class POTokenGenerator:
     """Автоматическая генерация PO Token для YouTube."""
 
     @staticmethod
-    def generate_from_ytdlp(client: str = "android") -> Optional[str]:
+    def generate_from_ytdlp(client: str = "android") -> str | None:
         """
         Генерация PO Token через yt-dlp info extraction.
 
@@ -29,7 +28,7 @@ class POTokenGenerator:
         test_videos = [
             "dQw4w9WgXcQ",  # Rick Roll
             "9bZkp7q19f0",  # PSY Gangnam Style (backup)
-            "kJQP7kiw5Fk"   # Eminem Love the Way You Lie (backup)
+            "kJQP7kiw5Fk",  # Eminem Love the Way You Lie (backup)
         ]
 
         test_video = random.choice(test_videos)
@@ -61,9 +60,7 @@ class POTokenGenerator:
                 )
 
                 if result.returncode != 0:
-                    logger.warning(
-                        f"yt-dlp extraction failed: {result.stderr[:200]}"
-                    )
+                    logger.warning(f"yt-dlp extraction failed: {result.stderr[:200]}")
                     return None
 
                 # Ищем info.json файл
@@ -73,7 +70,7 @@ class POTokenGenerator:
                     return None
 
                 # Парсим JSON и извлекаем PO Token
-                with open(info_files[0], "r", encoding="utf-8") as f:
+                with open(info_files[0], encoding="utf-8") as f:
                     info = json.load(f)
 
                 # Ищем токен в разных местах
@@ -105,9 +102,7 @@ class POTokenGenerator:
                     )
                     return po_token
                 else:
-                    logger.warning(
-                        f"❌ PO Token not found in metadata for {client}"
-                    )
+                    logger.warning(f"❌ PO Token not found in metadata for {client}")
                     return None
 
             except subprocess.TimeoutExpired:
@@ -121,7 +116,7 @@ class POTokenGenerator:
     def generate_fallback() -> str:
         """
         Fallback: возвращает пустой токен.
-        
+
         YouTube всё равно вернёт какие-то форматы, просто не самые лучшие.
         """
         logger.warning(

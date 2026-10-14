@@ -4,7 +4,8 @@
 человек выбрал его в /language. Кэш - чтобы не ходить в базу на каждый апдейт;
 процесс бота один, поэтому кэш не расходится с базой.
 """
-from database import UserSetting, get_db
+
+from database import UserSetting, session_scope
 from utils.i18n import DEFAULT_LANG, TEXTS
 
 _cache: dict[int, str] = {}
@@ -18,11 +19,10 @@ async def get_user_lang(user_id: int) -> str:
     if user_id in _cache:
         return _cache[user_id]
     lang = DEFAULT_LANG
-    async for session in get_db():
+    async with session_scope() as session:
         setting = await session.get(UserSetting, user_id)
         if setting and setting.lang in TEXTS:
             lang = setting.lang
-        break
     if len(_cache) >= CACHE_MAX:
         _cache.clear()
     _cache[user_id] = lang
@@ -31,8 +31,7 @@ async def get_user_lang(user_id: int) -> str:
 
 async def save_user_lang(user_id: int, lang: str) -> None:
     """Запомнить выбор. merge - вставит строку или обновит существующую."""
-    async for session in get_db():
+    async with session_scope() as session:
         await session.merge(UserSetting(user_id=user_id, lang=lang))
         await session.commit()
-        break
     _cache[user_id] = lang

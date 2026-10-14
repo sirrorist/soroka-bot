@@ -1,11 +1,12 @@
-# Только для разработки и CI, в образ не ставится
+# Только для разработки и CI, в образ не ставится.
+# Версии закреплены: обновления приносит Dependabot PR-ом с прогоном CI
 -r requirements.txt
 
-pytest
-pytest-asyncio
-ruff
-psycopg2-binary
+pytest==9.1.1
+pytest-asyncio==1.4.0
+# новая версия ruff меняет форматирование - обновлять вместе с `ruff format .`
+ruff==0.16.9
 # TELEGRAM_PROXY на машине разработки; aiogram без него прокси не принимает
-aiohttp-socks
+aiohttp-socks==0.12.0
 # тесты с настоящей базой (фикстура db в tests/conftest.py) - SQLite
-aiosqlite
+aiosqlite==0.22.1

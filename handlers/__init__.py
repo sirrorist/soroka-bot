@@ -1,16 +1,16 @@
 """Handlers package."""
+
 from aiogram import Dispatcher, F
 from aiogram.enums import ChatType
 
 from . import download, language, premium, start, stats, steam
-
-from .start import register_start_handlers
 from .download import register_download_handlers
-from .stats import register_stats_handlers
-from .premium import register_premium_handlers
 from .group import register_group_handlers
-from .steam import register_steam_handlers
 from .language import register_language_handlers
+from .premium import register_premium_handlers
+from .start import register_start_handlers
+from .stats import register_stats_handlers
+from .steam import register_steam_handlers
 
 
 def register_handlers(dp: Dispatcher) -> None:

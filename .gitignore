@@ -26,6 +26,7 @@ wheels/
 
 # Environment
 .env
+/sobriety.env
 .env.local
 .env.*.local
 

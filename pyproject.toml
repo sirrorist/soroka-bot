@@ -1,6 +1,8 @@
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+# база знаний - не код бота, её скрипты разовые
+extend-exclude = ["Docs"]
 
 [tool.ruff.format]
 quote-style = "double"

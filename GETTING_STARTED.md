@@ -153,6 +153,8 @@ python setup.py
 ## Шаг 5: Запуск бота
 
 ```bash
+# таблицы базы данных - миграциями; бот без них не запустится
+alembic upgrade head
 python main.py
 ```
 

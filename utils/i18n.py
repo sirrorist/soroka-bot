@@ -5,6 +5,7 @@
 asyncio.to_thread копирует контекст - поэтому t() работает и в загрузчиках,
 которые крутятся в отдельном потоке.
 """
+
 import tomllib
 from contextvars import ContextVar
 from pathlib import Path
@@ -18,7 +19,10 @@ _lang: ContextVar[str] = ContextVar("lang", default=DEFAULT_LANG)
 
 
 def _load() -> dict[str, dict]:
-    return {p.stem: tomllib.loads(p.read_text("utf-8")) for p in sorted(LOCALES_DIR.glob("*.toml"))}
+    return {
+        p.stem: tomllib.loads(p.read_text("utf-8"))
+        for p in sorted(LOCALES_DIR.glob("*.toml"))
+    }
 
 
 TEXTS = _load()

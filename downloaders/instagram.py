@@ -1,20 +1,27 @@
 """Instagram downloader."""
+
 import asyncio
-from typing import Dict, Any
+from typing import Any
 
+from downloaders.common import (
+    find_file,
+    new_workdir,
+    remove_workdir,
+    user_reason,
+    ydl_limits,
+)
 from utils.i18n import t
-from downloaders.common import find_file, new_workdir, remove_workdir, user_reason, ydl_limits
 
 
-def _download_sync(url: str) -> Dict[str, Any]:
+def _download_sync(url: str) -> dict[str, Any]:
     import yt_dlp
 
     workdir = new_workdir("instagram")
     try:
         ydl_opts = {
-            'format': 'best',
-            'quiet': True,
-            'no_warnings': True,
+            "format": "best",
+            "quiet": True,
+            "no_warnings": True,
             **ydl_limits(workdir, "instagram"),
         }
 
@@ -31,7 +38,7 @@ def _download_sync(url: str) -> Dict[str, Any]:
 
         # Determine content type
         ext = file.suffix.lower()
-        content_type = "video" if ext in ['.mp4', '.mov', '.webm'] else "photo"
+        content_type = "video" if ext in [".mp4", ".mov", ".webm"] else "photo"
 
         return {
             "success": True,
@@ -44,10 +51,10 @@ def _download_sync(url: str) -> Dict[str, Any]:
         remove_workdir(workdir)
         return {
             "success": False,
-            "error": user_reason(e, t("errors.platform_failed"), "instagram")
+            "error": user_reason(e, t("errors.platform_failed"), "instagram"),
         }
 
 
-async def download_instagram_content(url: str) -> Dict[str, Any]:
+async def download_instagram_content(url: str) -> dict[str, Any]:
     """Download Instagram content (photo or video) в отдельном потоке."""
     return await asyncio.to_thread(_download_sync, url)

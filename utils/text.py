@@ -1,4 +1,5 @@
 """Мелочи для текстов бота. Слова и единицы - из locales/, на текущем языке."""
+
 from utils.i18n import get_lang, t
 
 
@@ -16,7 +17,9 @@ def plural(n: int, one: str, few: str, many: str) -> str:
 
 def download_word(n: int) -> str:
     """Только слово "скачивание" в нужной форме - когда число выделяется отдельно."""
-    return plural(n, t("units.download_one"), t("units.download_few"), t("units.download_many"))
+    return plural(
+        n, t("units.download_one"), t("units.download_few"), t("units.download_many")
+    )
 
 
 def downloads_word(n: int) -> str:

@@ -1,6 +1,8 @@
 """Main entry point for the Soroka bot."""
+
 import asyncio
 import secrets
+
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -10,9 +12,14 @@ from aiohttp import web
 from loguru import logger
 
 from config import settings
+from database import SchemaNotReady, check_schema
 from handlers import register_handlers
-from database import init_db
-from middleware import CommandLogMiddleware, LangMiddleware, RateLimitMiddleware, UserMiddleware
+from middleware import (
+    CommandLogMiddleware,
+    LangMiddleware,
+    RateLimitMiddleware,
+    UserMiddleware,
+)
 from utils.menu import set_default_menus
 
 # Telegram присылает его в заголовке X-Telegram-Bot-Api-Secret-Token, апдейты без
@@ -24,10 +31,8 @@ async def on_startup(bot: Bot) -> None:
     """Initialize on bot startup."""
     logger.info("Bot is starting up...")
 
-    # Initialize database
-    await init_db()
     await set_default_menus(bot)
-    
+
     # Set webhook if configured
     if settings.webhook_url:
         await bot.set_webhook(
@@ -67,16 +72,28 @@ def setup_logging():
 async def main():
     """Main function to run the bot."""
     setup_logging()
-    
+
+    # Схему меняет `alembic upgrade head` до запуска; бот только сверяет ревизию -
+    # раньше Telegram: на неподходящей базе он не трогает ни webhook, ни апдейты
+    try:
+        await check_schema()
+    except SchemaNotReady as e:
+        logger.error(f"Bot not started: {e}")
+        raise SystemExit(1) from None
+
     # Initialize bot and dispatcher
-    session = AiohttpSession(proxy=settings.telegram_proxy) if settings.telegram_proxy else None
+    session = (
+        AiohttpSession(proxy=settings.telegram_proxy)
+        if settings.telegram_proxy
+        else None
+    )
     bot = Bot(
         token=settings.bot_token,
         session=session,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher()
-    
+
     # Register middleware
     # outer: пишет и те команды, которые ни один обработчик не взял
     dp.message.outer_middleware(CommandLogMiddleware())
@@ -86,14 +103,14 @@ async def main():
     dp.message.middleware(UserMiddleware())
     dp.message.middleware(RateLimitMiddleware())
     dp.callback_query.middleware(UserMiddleware())
-    
+
     # Register handlers
     register_handlers(dp)
-    
+
     # Setup startup/shutdown handlers
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
-    
+
     if settings.webhook_url:
         # Webhook mode (for production)
         app = web.Application()
@@ -109,7 +126,7 @@ async def main():
         await runner.setup()
         site = web.TCPSite(runner, settings.host, settings.port)
         await site.start()
-        
+
         logger.info(f"Starting webhook server on {settings.host}:{settings.port}")
 
         # Держим сервер запущенным

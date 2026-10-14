@@ -1,8 +1,17 @@
 """utils/text.py: склонения, объёмы, шкала, короткое имя. Ожидания - литералы."""
+
 import pytest
 
 from utils.i18n import set_lang
-from utils.text import bar, download_word, downloads_word, plural, short_name, size_parts, size_text
+from utils.text import (
+    bar,
+    download_word,
+    downloads_word,
+    plural,
+    short_name,
+    size_parts,
+    size_text,
+)
 
 MB = 1024 * 1024
 GB = 1024 * MB
@@ -12,18 +21,44 @@ E, F = "▱", "▰"
 @pytest.mark.parametrize(
     "n, word",
     [
-        (0, "many"), (1, "one"), (2, "few"), (3, "few"), (4, "few"), (5, "many"),
-        (10, "many"), (11, "many"), (12, "many"), (13, "many"), (14, "many"),
-        (15, "many"), (20, "many"), (21, "one"), (22, "few"), (24, "few"), (25, "many"),
-        (100, "many"), (101, "one"), (102, "few"), (111, "many"), (112, "many"),
-        (114, "many"), (121, "one"), (1000, "many"), (-1, "one"), (-2, "few"), (-11, "many"),
+        (0, "many"),
+        (1, "one"),
+        (2, "few"),
+        (3, "few"),
+        (4, "few"),
+        (5, "many"),
+        (10, "many"),
+        (11, "many"),
+        (12, "many"),
+        (13, "many"),
+        (14, "many"),
+        (15, "many"),
+        (20, "many"),
+        (21, "one"),
+        (22, "few"),
+        (24, "few"),
+        (25, "many"),
+        (100, "many"),
+        (101, "one"),
+        (102, "few"),
+        (111, "many"),
+        (112, "many"),
+        (114, "many"),
+        (121, "one"),
+        (1000, "many"),
+        (-1, "one"),
+        (-2, "few"),
+        (-11, "many"),
     ],
 )
 def test_plural_ru(n, word):
     assert plural(n, "one", "few", "many") == word
 
 
-@pytest.mark.parametrize("n, word", [(0, "many"), (1, "one"), (-1, "one"), (2, "many"), (21, "many"), (101, "many")])
+@pytest.mark.parametrize(
+    "n, word",
+    [(0, "many"), (1, "one"), (-1, "one"), (2, "many"), (21, "many"), (101, "many")],
+)
 def test_plural_en_has_only_one_and_many(n, word):
     set_lang("en")
     assert plural(n, "one", "few", "many") == word
@@ -31,15 +66,25 @@ def test_plural_en_has_only_one_and_many(n, word):
 
 @pytest.mark.parametrize(
     "n, text",
-    [(1, "1 скачивание"), (2, "2 скачивания"), (5, "5 скачиваний"), (11, "11 скачиваний"),
-     (21, "21 скачивание"), (22, "22 скачивания"), (112, "112 скачиваний")],
+    [
+        (1, "1 скачивание"),
+        (2, "2 скачивания"),
+        (5, "5 скачиваний"),
+        (11, "11 скачиваний"),
+        (21, "21 скачивание"),
+        (22, "22 скачивания"),
+        (112, "112 скачиваний"),
+    ],
 )
 def test_downloads_word_ru(n, text):
     assert downloads_word(n) == text
     assert text.endswith(download_word(n))
 
 
-@pytest.mark.parametrize("n, text", [(0, "0 downloads"), (1, "1 download"), (2, "2 downloads"), (21, "21 downloads")])
+@pytest.mark.parametrize(
+    "n, text",
+    [(0, "0 downloads"), (1, "1 download"), (2, "2 downloads"), (21, "21 downloads")],
+)
 def test_downloads_word_en(n, text):
     set_lang("en")
     assert downloads_word(n) == text

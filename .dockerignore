@@ -12,6 +12,10 @@ storage/
 .git
 .gitignore
 .env
+*.env
+*.db
+*.sqlite
+*.sqlite3
 .idea
 .vscode
 *.md

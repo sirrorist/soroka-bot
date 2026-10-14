@@ -4,6 +4,7 @@
 "строка уже есть" проверяются самой базой. Время замораживается подменой datetime
 в модуле group, чтобы тесты не зависели от текущей даты.
 """
+
 import asyncio
 import datetime as real_dt
 from types import SimpleNamespace
@@ -22,15 +23,9 @@ TODAY = NOW.date()
 YESTERDAY = TODAY - real_dt.timedelta(days=1)
 
 
-class FrozenDatetime(real_dt.datetime):
-    @classmethod
-    def utcnow(cls):
-        return NOW
-
-
 @pytest.fixture(autouse=True)
 def frozen(monkeypatch):
-    monkeypatch.setattr(group, "datetime", FrozenDatetime)
+    monkeypatch.setattr(group, "utcnow", lambda: NOW)
     # asyncio.Lock привязывается к циклу событий при первом ожидании; у каждого теста
     # свой цикл, поэтому замок модуля на время теста заменяется свежим
     monkeypatch.setattr(group, "_migrate_lock", asyncio.Lock())
@@ -61,7 +56,9 @@ def test_not_premium_flag_wins_over_future_term():
 
 
 def test_premium_without_term_is_forever():
-    assert group.chat_is_premium(Chat(id=1, is_premium=True, premium_until=None)) is True
+    assert (
+        group.chat_is_premium(Chat(id=1, is_premium=True, premium_until=None)) is True
+    )
 
 
 def test_premium_with_future_term_is_active():
@@ -76,7 +73,9 @@ def test_premium_with_past_term_is_expired():
 
 def test_premium_expires_exactly_at_term():
     # граница: premium_until == сейчас уже не действует (строгое сравнение)
-    assert group.chat_is_premium(Chat(id=1, is_premium=True, premium_until=NOW)) is False
+    assert (
+        group.chat_is_premium(Chat(id=1, is_premium=True, premium_until=NOW)) is False
+    )
 
 
 def test_null_flag_is_not_premium():
@@ -138,7 +137,9 @@ async def test_reserve_treats_null_counters_as_zero(db):
 @pytest.mark.asyncio
 async def test_reserve_new_day_resets_counters_before_counting(db):
     # вчера лимит был исчерпан и по числу, и по объёму
-    await put(db, day=YESTERDAY, downloads_today=10, bytes_today=500 * MB, total_downloads=42)
+    await put(
+        db, day=YESTERDAY, downloads_today=10, bytes_today=500 * MB, total_downloads=42
+    )
     assert await group._reserve_chat(-100, 10, 350 * MB) is True
     r = await row(db)
     assert (r.day, r.downloads_today, r.bytes_today) == (TODAY, 1, 0)
@@ -237,7 +238,11 @@ async def test_fits_when_already_over_limit_reports_zero_left(db):
     await put(db, day=TODAY, bytes_today=400 * MB)
     text = await group._chat_fits(-100, 350 * MB, 1 * MB)
     # остаток не уходит в минус: "осталось -50" пользователю не показывают
-    assert text is not None and "осталось 0" in text and "-" not in text.split("осталось")[1]
+    assert (
+        text is not None
+        and "осталось 0" in text
+        and "-" not in text.split("осталось")[1]
+    )
 
 
 @pytest.mark.asyncio
@@ -247,7 +252,10 @@ async def test_fits_english_text_uses_dot_and_en_units(db):
     set_lang("en")
     await put(db, day=TODAY, bytes_today=0)
     text = await group._chat_fits(-100, 5 * MB, int(6.5 * MB))
-    assert text == "The file is 6.5 MB and doesn't fit the chat's daily volume - 5.0 MB left."
+    assert (
+        text
+        == "The file is 6.5 MB and doesn't fit the chat's daily volume - 5.0 MB left."
+    )
 
 
 # ---------- _chat_delivered ----------
@@ -323,15 +331,27 @@ UNTIL = real_dt.datetime(2026, 12, 31, 0, 0, 0)
 @pytest.mark.asyncio
 async def test_migrate_moves_premium_and_counters_to_new_id(db):
     await put(
-        db, OLD, title="Старая", is_premium=True, premium_until=UNTIL, day=TODAY,
-        downloads_today=4, bytes_today=123, total_downloads=17,
+        db,
+        OLD,
+        title="Старая",
+        is_premium=True,
+        premium_until=UNTIL,
+        day=TODAY,
+        downloads_today=4,
+        bytes_today=123,
+        total_downloads=17,
     )
     await group.migrate_chat(OLD, NEW, "Супергруппа")
     assert await row(db, OLD) is None
     n = await row(db, NEW)
     assert n.title == "Супергруппа"
     assert (n.is_premium, n.premium_until) == (True, UNTIL)
-    assert (n.day, n.downloads_today, n.bytes_today, n.total_downloads) == (TODAY, 4, 123, 17)
+    assert (n.day, n.downloads_today, n.bytes_today, n.total_downloads) == (
+        TODAY,
+        4,
+        123,
+        17,
+    )
 
 
 @pytest.mark.asyncio
@@ -343,7 +363,9 @@ async def test_migrate_keeps_old_title_when_new_has_none(db):
 
 @pytest.mark.asyncio
 async def test_migrate_second_call_does_nothing(db):
-    await put(db, OLD, is_premium=True, premium_until=UNTIL, day=TODAY, total_downloads=17)
+    await put(
+        db, OLD, is_premium=True, premium_until=UNTIL, day=TODAY, total_downloads=17
+    )
     await group.migrate_chat(OLD, NEW, "Т")
     await group.migrate_chat(OLD, NEW, "Т")
     n = await row(db, NEW)
@@ -368,10 +390,25 @@ async def test_migrate_unknown_old_chat_creates_nothing(db):
 
 @pytest.mark.asyncio
 async def test_migrate_into_existing_row_carries_premium_and_sums_total(db):
-    await put(db, OLD, is_premium=True, premium_until=UNTIL, day=TODAY, total_downloads=3,
-              downloads_today=4, bytes_today=40)
-    await put(db, NEW, is_premium=False, day=TODAY, total_downloads=5,
-              downloads_today=1, bytes_today=10)
+    await put(
+        db,
+        OLD,
+        is_premium=True,
+        premium_until=UNTIL,
+        day=TODAY,
+        total_downloads=3,
+        downloads_today=4,
+        bytes_today=40,
+    )
+    await put(
+        db,
+        NEW,
+        is_premium=False,
+        day=TODAY,
+        total_downloads=5,
+        downloads_today=1,
+        bytes_today=10,
+    )
     await group.migrate_chat(OLD, NEW, None)
     assert await row(db, OLD) is None
     n = await row(db, NEW)
@@ -413,7 +450,9 @@ async def test_two_simultaneous_migrations_transfer_once(db, monkeypatch, new_ex
     """Обе служебные записи о переезде приходят одновременно (был баг: счётчики
     переносились дважды). Второй читатель новой строки задерживается так, чтобы
     увидеть её уже после коммита первого - без замка это и даёт двойной перенос."""
-    await put(db, OLD, is_premium=True, premium_until=UNTIL, day=TODAY, total_downloads=3)
+    await put(
+        db, OLD, is_premium=True, premium_until=UNTIL, day=TODAY, total_downloads=3
+    )
     if new_exists:
         await put(db, NEW, is_premium=False, day=TODAY, total_downloads=5)
 
@@ -446,7 +485,9 @@ async def test_migrate_service_messages_call_migrate_with_right_ids(monkeypatch)
     migrate = AsyncMock()
     monkeypatch.setattr(group, "migrate_chat", migrate)
 
-    to_msg = SimpleNamespace(chat=SimpleNamespace(id=-500, title="Старая"), migrate_to_chat_id=-1000500)
+    to_msg = SimpleNamespace(
+        chat=SimpleNamespace(id=-500, title="Старая"), migrate_to_chat_id=-1000500
+    )
     await group.on_migrate_to(to_msg)
     migrate.assert_awaited_with(-500, -1000500, None)
 
@@ -498,7 +539,9 @@ async def test_group_dl_link_from_replied_message(db, monkeypatch):
     deliver = AsyncMock()
     monkeypatch.setattr(group.dl, "deliver", deliver)
     m = group_message()
-    m.reply_to_message = SimpleNamespace(text=None, caption="глянь https://youtu.be/abc")
+    m.reply_to_message = SimpleNamespace(
+        text=None, caption="глянь https://youtu.be/abc"
+    )
     await group.group_download(m, command(None), user=SimpleNamespace(id=1))
     kw = deliver.await_args.kwargs
     assert (kw["platform"], kw["url"]) == ("youtube", "https://youtu.be/abc")
@@ -510,7 +553,9 @@ async def test_group_dl_free_chat_wires_chat_limits_and_upsell(db, monkeypatch):
     monkeypatch.setattr(settings, "group_free_daily_mb", 350)
     deliver = AsyncMock()
     monkeypatch.setattr(group.dl, "deliver", deliver)
-    await group.group_download(group_message(), command("https://youtu.be/abc"), user=SimpleNamespace(id=7))
+    await group.group_download(
+        group_message(), command("https://youtu.be/abc"), user=SimpleNamespace(id=7)
+    )
 
     kw = deliver.await_args.kwargs
     assert kw["user_id"] == 7 and kw["premium"] is False
@@ -538,7 +583,9 @@ async def test_group_dl_premium_chat_has_premium_limits_and_no_upsell(db, monkey
     monkeypatch.setattr(settings, "group_premium_daily_mb", 5120)
     deliver = AsyncMock()
     monkeypatch.setattr(group.dl, "deliver", deliver)
-    await group.group_download(group_message(), command("https://youtu.be/abc"), user=SimpleNamespace(id=7))
+    await group.group_download(
+        group_message(), command("https://youtu.be/abc"), user=SimpleNamespace(id=7)
+    )
 
     kw = deliver.await_args.kwargs
     assert kw["premium"] is True

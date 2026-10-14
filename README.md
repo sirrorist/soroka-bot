@@ -36,7 +36,8 @@
 2. Создайте `.env` файл на основе `env_template.txt`
 3. Заполните `BOT_TOKEN` в `.env`
 4. Запустите базу данных: `docker-compose up -d db redis`
-5. Запустите бота: `python main.py`
+5. Создайте таблицы: `alembic upgrade head`
+6. Запустите бота: `python main.py`
 
 ## Документация
 

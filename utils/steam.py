@@ -3,6 +3,7 @@
 Ключ идёт в query-строке, поэтому ни URL запроса, ни текст исключений aiohttp
 (они печатают URL) не попадают ни в лог, ни в ответ пользователю.
 """
+
 import re
 
 import aiohttp
@@ -17,7 +18,8 @@ PUBLIC = 3
 # вокруг, логина и порта (находка tester 2026-09-30: search() брал имя из
 # notsteamcommunity.com/id/... и из ?u=steamcommunity.com/id/...)
 _PROFILE_URL = re.compile(
-    r"(?:https?://)?(?:www\.)?steamcommunity\.com/(id|profiles)/([^/?#\s]+)/?(?:[/?#]\S*)?", re.I
+    r"(?:https?://)?(?:www\.)?steamcommunity\.com/(id|profiles)/([^/?#\s]+)/?(?:[/?#]\S*)?",
+    re.I,
 )
 _STEAMID = re.compile(r"7656119\d{10}")
 _VANITY = re.compile(r"[A-Za-z0-9_-]{2,32}")
@@ -73,13 +75,17 @@ async def recent_playtime(query: str, key: str) -> dict:
     async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
         steamid = value
         if kind == "vanity":
-            data = await _get(session, "ISteamUser/ResolveVanityURL/v1/", key, vanityurl=value)
+            data = await _get(
+                session, "ISteamUser/ResolveVanityURL/v1/", key, vanityurl=value
+            )
             resp = data.get("response") or {}
             if resp.get("success") != 1 or not resp.get("steamid"):
                 raise SteamError(t("steam.error_not_found"))
             steamid = resp["steamid"]
 
-        data = await _get(session, "ISteamUser/GetPlayerSummaries/v2/", key, steamids=steamid)
+        data = await _get(
+            session, "ISteamUser/GetPlayerSummaries/v2/", key, steamids=steamid
+        )
         players = (data.get("response") or {}).get("players") or []
         if not players:
             raise SteamError(t("steam.error_not_found"))
@@ -92,7 +98,10 @@ async def recent_playtime(query: str, key: str) -> dict:
 
     played = sorted(
         (
-            (g.get("name") or f"app {g.get('appid')}", int(g.get("playtime_2weeks") or 0))
+            (
+                g.get("name") or f"app {g.get('appid')}",
+                int(g.get("playtime_2weeks") or 0),
+            )
             for g in games
         ),
         key=lambda g: g[1],

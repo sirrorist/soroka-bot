@@ -1,4 +1,37 @@
 services:
+  # Отдельный счётчик: только профиль sobriety, отдельный токен и SQLite.
+  sobriety:
+    build:
+      context: .
+      dockerfile: Dockerfile.sobriety
+    profiles: ["sobriety"]
+    restart: unless-stopped
+    env_file:
+      # Пустой шаблон существует и не ломает обычный compose без нового профиля.
+      # Для запуска счётчика владелец задаёт отдельный секретный SOBRIETY_ENV_FILE.
+      - ${SOBRIETY_ENV_FILE:-./sobriety.env.example}
+    environment:
+      - SOBRIETY_DB_PATH=/data/sobriety.sqlite3
+    volumes:
+      - sobriety_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    mem_limit: 64m
+    memswap_limit: 64m
+    cpus: 0.25
+    pids_limit: 32
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - sobriety-network
+
   bot:
     build: .
     container_name: tiktube_download_bot
@@ -59,8 +92,12 @@ services:
     # на read-only. Нет картинки в ./moved/ - заглушка отвечает только текстом
     volumes:
       - ./moved:/app/moved:ro
-    mem_limit: 256m
-    pids_limit: 64
+    # заглушка - только стандартная библиотека: ~25 МБ (замер 2026-10-01); swap не
+    # даётся (memswap_limit = mem_limit), утечка - OOM в логе, а не тихий swap
+    mem_limit: 64m
+    memswap_limit: 64m
+    # один поток, без пула
+    pids_limit: 16
     cap_drop:
       - ALL
     cap_add:
@@ -129,9 +166,12 @@ services:
       - app-network
 
 volumes:
+  sobriety_data:
   postgres_data:
   redis_data:
 
 networks:
+  sobriety-network:
+    driver: bridge
   app-network:
     driver: bridge

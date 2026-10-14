@@ -3,7 +3,6 @@
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 from loguru import logger
 
@@ -28,7 +27,7 @@ class POTokenCache:
             return {}
 
         try:
-            with open(self.cache_file, "r", encoding="utf-8") as f:
+            with open(self.cache_file, encoding="utf-8") as f:
                 cache = json.load(f)
                 logger.debug(f"PO Token cache loaded from {self.cache_file}")
                 return cache
@@ -45,7 +44,7 @@ class POTokenCache:
         except Exception as e:
             logger.error(f"Failed to save PO Token cache: {e}")
 
-    def get_token(self, client: str = "android") -> Optional[str]:
+    def get_token(self, client: str = "android") -> str | None:
         """
         Получить токен для клиента.
 
@@ -71,9 +70,7 @@ class POTokenCache:
         )
         return token_data["token"]
 
-    def set_token(
-        self, client: str, token: str, ttl_days: int = 3
-    ) -> None:
+    def set_token(self, client: str, token: str, ttl_days: int = 3) -> None:
         """
         Сохранить токен в кэш.
 

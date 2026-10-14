@@ -1,8 +1,10 @@
 """Распознавание ссылок и handlers/download.py: handle_url, лимит, очистка, экранирование.
 
-Сети и настоящей базы нет: загрузчики, get_db и сообщения - моки, каталог - в tmp_path.
+Сети и настоящей базы нет: загрузчики, session_scope и сообщения - моки, каталог - в tmp_path.
 """
+
 import asyncio
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -21,18 +23,34 @@ from handlers import download as dl
 @pytest.mark.parametrize(
     "text, platform, url",
     [
-        ("https://vt.tiktok.com/ZSaD796vL/", "tiktok", "https://vt.tiktok.com/ZSaD796vL/"),
-        ("https://vm.tiktok.com/ZSaD796vL/", "tiktok", "https://vm.tiktok.com/ZSaD796vL/"),
+        (
+            "https://vt.tiktok.com/ZSaD796vL/",
+            "tiktok",
+            "https://vt.tiktok.com/ZSaD796vL/",
+        ),
+        (
+            "https://vm.tiktok.com/ZSaD796vL/",
+            "tiktok",
+            "https://vm.tiktok.com/ZSaD796vL/",
+        ),
         ("https://youtu.be/dQw4w9WgXcQ", "youtube", "https://youtu.be/dQw4w9WgXcQ"),
         (
             "https://www.tiktok.com/@aliushkaa1/video/7593764380861385991",
             "tiktok",
             "https://www.tiktok.com/@aliushkaa1/video/7593764380861385991",
         ),
-        ("https://m.youtube.com/watch?v=abc", "youtube", "https://m.youtube.com/watch?v=abc"),
+        (
+            "https://m.youtube.com/watch?v=abc",
+            "youtube",
+            "https://m.youtube.com/watch?v=abc",
+        ),
         ("http://tiktok.com/@u/video/1", "tiktok", "http://tiktok.com/@u/video/1"),
         ("https://x.com/user/status/1", "twitter", "https://x.com/user/status/1"),
-        ("https://www.instagram.com/p/ABC/", "instagram", "https://www.instagram.com/p/ABC/"),
+        (
+            "https://www.instagram.com/p/ABC/",
+            "instagram",
+            "https://www.instagram.com/p/ABC/",
+        ),
         # ссылка внутри текста, окружающие слова и пунктуация не попадают в URL
         ("смотри https://youtu.be/abc, класс", "youtube", "https://youtu.be/abc"),
         ("(https://youtu.be/abc)", "youtube", "https://youtu.be/abc"),
@@ -42,7 +60,11 @@ from handlers import download as dl
         # схема необязательна
         ("tiktok.com/@u/video/1", "tiktok", "https://tiktok.com/@u/video/1"),
         ("youtu.be/abc", "youtube", "https://youtu.be/abc"),
-        ("www.youtube.com/watch?v=abc", "youtube", "https://www.youtube.com/watch?v=abc"),
+        (
+            "www.youtube.com/watch?v=abc",
+            "youtube",
+            "https://www.youtube.com/watch?v=abc",
+        ),
         # регистр схемы и хоста
         ("HTTPS://WWW.TikTok.com/x", "tiktok", "https://WWW.TikTok.com/x"),
         # первая подходящая ссылка, чужие до неё пропускаются
@@ -91,7 +113,10 @@ def test_extract_url_rejects(text):
 
 
 def test_extract_url_takes_suffix_only_after_dot():
-    assert extract_url("https://a.b.tiktok.com/x") == ("tiktok", "https://a.b.tiktok.com/x")
+    assert extract_url("https://a.b.tiktok.com/x") == (
+        "tiktok",
+        "https://a.b.tiktok.com/x",
+    )
     assert extract_url("https://xtiktok.com/x") is None
 
 
@@ -104,25 +129,30 @@ def test_detect_platform_uses_host_not_substring():
 
 
 def _session_factory(session):
-    async def get_db():
+    @asynccontextmanager
+    async def session_scope():
         yield session
 
-    return get_db
+    return session_scope
 
 
 def _sql(stmt):
     return str(
-        stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+        stmt.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
     )
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rowcount, expected", [(1, True), (0, False)])
-async def test_reserve_download_is_single_conditional_update(monkeypatch, rowcount, expected):
+async def test_reserve_download_is_single_conditional_update(
+    monkeypatch, rowcount, expected
+):
     session = MagicMock()
     session.execute = AsyncMock(return_value=SimpleNamespace(rowcount=rowcount))
     session.commit = AsyncMock()
-    monkeypatch.setattr(dl, "get_db", _session_factory(session))
+    monkeypatch.setattr(dl, "session_scope", _session_factory(session))
 
     assert await dl._reserve_download(5, 7) is expected
 
@@ -140,7 +170,7 @@ async def test_release_download_decrements_but_never_below_zero(monkeypatch):
     session = MagicMock()
     session.execute = AsyncMock()
     session.commit = AsyncMock()
-    monkeypatch.setattr(dl, "get_db", _session_factory(session))
+    monkeypatch.setattr(dl, "session_scope", _session_factory(session))
 
     await dl._release_download(5)
 
@@ -173,7 +203,9 @@ class Harness:
 
         session = MagicMock()
         session.execute = AsyncMock(
-            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=self.fresh_user))
+            return_value=MagicMock(
+                scalar_one_or_none=MagicMock(return_value=self.fresh_user)
+            )
         )
         session.add = MagicMock(side_effect=self.added.append)
         session.commit = AsyncMock()
@@ -181,7 +213,7 @@ class Harness:
 
         monkeypatch.setattr(dl, "_reserve_download", self.reserve)
         monkeypatch.setattr(dl, "_release_download", self.release)
-        monkeypatch.setattr(dl, "get_db", _session_factory(session))
+        monkeypatch.setattr(dl, "session_scope", _session_factory(session))
         for platform in ("tiktok", "youtube", "instagram", "twitter"):
             monkeypatch.setitem(dl.DOWNLOADERS, platform, self.downloader)
         monkeypatch.setattr(dl, "_active_users", set())
@@ -246,7 +278,12 @@ async def test_rate_limited_answers_limit_and_downloads_nothing(h):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "text",
-    ["привет, как дела", "http://evil.example/?a=tiktok.com", "ytsearch5:cats", "file:///etc/passwd"],
+    [
+        "привет, как дела",
+        "http://evil.example/?a=tiktok.com",
+        "ytsearch5:cats",
+        "file:///etc/passwd",
+    ],
 )
 async def test_message_without_known_link_is_ignored(h, text):
     m = h.message(text)
@@ -286,7 +323,9 @@ async def test_exhausted_limit_refuses_without_download_or_release(h):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("error", [RuntimeError("db is down"), asyncio.CancelledError()])
+@pytest.mark.parametrize(
+    "error", [RuntimeError("db is down"), asyncio.CancelledError()]
+)
 async def test_reserve_failure_frees_user_and_downloads_nothing(h, error):
     h.reserve.side_effect = error
     m = h.message(URL)
@@ -369,7 +408,8 @@ async def test_failed_download_without_error_text_gets_default_message(h):
 async def test_downloader_receives_only_the_url_not_the_whole_text(h):
     h.downloader.return_value = {"success": False, "error": "x"}
     await dl.handle_url(
-        h.message("смотри https://youtu.be/abc, класс\nhttp://169.254.169.254/"), user=h.user()
+        h.message("смотри https://youtu.be/abc, класс\nhttp://169.254.169.254/"),
+        user=h.user(),
     )
     h.downloader.assert_awaited_once_with("https://youtu.be/abc")
 
@@ -377,7 +417,11 @@ async def test_downloader_receives_only_the_url_not_the_whole_text(h):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "content_type, method",
-    [("video", "answer_video"), ("photo", "answer_photo"), ("document", "answer_document")],
+    [
+        ("video", "answer_video"),
+        ("photo", "answer_photo"),
+        ("document", "answer_document"),
+    ],
 )
 async def test_success_delivers_file_removes_workdir_and_does_not_release(
     h, content_type, method
@@ -491,7 +535,9 @@ async def test_second_request_of_same_user_is_refused_while_first_runs(h):
     # без замка второй запрос застрял бы на gate: ограничиваем ожидание, а не вешаем набор
     await asyncio.wait_for(dl.handle_url(second, user=h.user()), 5)
 
-    assert len(_answered_texts(second)) == 1 and "Ещё качаю" in _answered_texts(second)[0]
+    assert (
+        len(_answered_texts(second)) == 1 and "Ещё качаю" in _answered_texts(second)[0]
+    )
     # отказ не съедает слот лимита и не запускает загрузку
     h.reserve.assert_awaited_once_with(USER_ID, 5)
     h.downloader.assert_awaited_once_with(URL)

@@ -2,6 +2,7 @@
 
 Тексты - в locales/; сообщение владельцу - всегда по-русски.
 """
+
 import time
 from html import escape
 
@@ -43,7 +44,7 @@ def request_keyboard():
 @router.callback_query(F.data == "premium")
 async def show_premium(message_or_query, user=None):
     """Show premium information."""
-    is_premium = user.is_premium if user and hasattr(user, 'is_premium') else False
+    is_premium = user.is_premium if user and hasattr(user, "is_premium") else False
 
     if is_premium:
         text = t("premium.active", premium=settings.premium_user_limit)
@@ -101,7 +102,9 @@ async def premium_confirm(callback: CallbackQuery):
         who = f"@{escape(tg_user.username)} ({who})"
     target = t("premium.target_self", lang="ru")
     if chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
-        target = t("premium.target_chat", lang="ru", title=escape(chat.title or ""), id=chat.id)
+        target = t(
+            "premium.target_chat", lang="ru", title=escape(chat.title or ""), id=chat.id
+        )
     try:
         await callback.bot.send_message(
             settings.admin_id,

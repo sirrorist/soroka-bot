@@ -3,7 +3,9 @@
 Последний блок - сквозной: команда группы -> настоящий deliver -> настоящая SQLite,
 загрузчик и Telegram подставные.
 """
+
 import asyncio
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -29,7 +31,10 @@ def test_caption_links_title_to_original():
 
 def test_caption_escapes_title_html():
     got = dl._caption('<b>hi</b> & "q"', "youtube", "https://youtu.be/a")
-    assert got == '<a href="https://youtu.be/a">&lt;b&gt;hi&lt;/b&gt; &amp; &quot;q&quot;</a>'
+    assert (
+        got
+        == '<a href="https://youtu.be/a">&lt;b&gt;hi&lt;/b&gt; &amp; &quot;q&quot;</a>'
+    )
 
 
 def test_caption_escapes_quote_and_ampersand_in_href():
@@ -41,28 +46,51 @@ def test_caption_escapes_quote_and_ampersand_in_href():
 
 @pytest.mark.parametrize(
     "platform, name",
-    [("tiktok", "TikTok"), ("youtube", "YouTube"), ("instagram", "Instagram"), ("twitter", "X"),
-     ("mars", "mars")],
+    [
+        ("tiktok", "TikTok"),
+        ("youtube", "YouTube"),
+        ("instagram", "Instagram"),
+        ("twitter", "X"),
+        ("mars", "mars"),
+    ],
 )
 def test_caption_without_title_says_original_on_platform(platform, name):
     for title in (None, "", "   ", "\n"):
-        assert dl._caption(title, platform, "https://e/x") == f'<a href="https://e/x">Оригинал на {name}</a>'
+        assert (
+            dl._caption(title, platform, "https://e/x")
+            == f'<a href="https://e/x">Оригинал на {name}</a>'
+        )
 
 
-@pytest.mark.parametrize("placeholder", ["TikTok Video", "YouTube Content", "Instagram Content", "Twitter Content"])
+@pytest.mark.parametrize(
+    "placeholder",
+    ["TikTok Video", "YouTube Content", "Instagram Content", "Twitter Content"],
+)
 def test_caption_placeholder_titles_from_downloaders_are_replaced(placeholder):
-    assert dl._caption(placeholder, "tiktok", "https://e/x") == '<a href="https://e/x">Оригинал на TikTok</a>'
+    assert (
+        dl._caption(placeholder, "tiktok", "https://e/x")
+        == '<a href="https://e/x">Оригинал на TikTok</a>'
+    )
     # и с лишними пробелами по краям и внутри
-    assert dl._caption(f"  {placeholder}\n", "tiktok", "https://e/x") == '<a href="https://e/x">Оригинал на TikTok</a>'
+    assert (
+        dl._caption(f"  {placeholder}\n", "tiktok", "https://e/x")
+        == '<a href="https://e/x">Оригинал на TikTok</a>'
+    )
 
 
 def test_caption_real_title_similar_to_placeholder_is_kept():
-    assert dl._caption("TikTok Video 2", "tiktok", "https://e/x") == '<a href="https://e/x">TikTok Video 2</a>'
+    assert (
+        dl._caption("TikTok Video 2", "tiktok", "https://e/x")
+        == '<a href="https://e/x">TikTok Video 2</a>'
+    )
 
 
 def test_caption_fallback_in_english():
     set_lang("en")
-    assert dl._caption(None, "twitter", "https://e/x") == '<a href="https://e/x">Original on X</a>'
+    assert (
+        dl._caption(None, "twitter", "https://e/x")
+        == '<a href="https://e/x">Original on X</a>'
+    )
 
 
 def test_caption_title_at_limit_is_kept_and_longer_is_cut():
@@ -78,7 +106,9 @@ def test_caption_cut_does_not_leave_space_before_dots():
 
 
 def test_caption_collapses_whitespace_in_title():
-    assert dl._caption("раз\n  два\t три", "tiktok", "u") == '<a href="u">раз два три</a>'
+    assert (
+        dl._caption("раз\n  два\t три", "tiktok", "u") == '<a href="u">раз два три</a>'
+    )
 
 
 # ---------- limit_text ----------
@@ -109,27 +139,36 @@ class Env:
         self.calls: list[str] = []
         self.processing = MagicMock()
         self.processing.edit_text = AsyncMock()
-        self.processing.delete = AsyncMock(side_effect=lambda: self.calls.append("delete"))
+        self.processing.delete = AsyncMock(
+            side_effect=lambda: self.calls.append("delete")
+        )
         self.downloader = AsyncMock()
         self.reserve = AsyncMock(return_value=True)
         self.release = AsyncMock(side_effect=lambda: self.calls.append("release"))
         self.fits = AsyncMock(return_value=None)
-        self.on_delivered = AsyncMock(side_effect=lambda size: self.calls.append(f"delivered:{size}"))
+        self.on_delivered = AsyncMock(
+            side_effect=lambda size: self.calls.append(f"delivered:{size}")
+        )
         for platform in ("tiktok", "youtube", "instagram", "twitter"):
             monkeypatch.setitem(dl.DOWNLOADERS, platform, self.downloader)
         monkeypatch.setattr(dl, "_active_users", set())
         monkeypatch.setattr(dl, "_download_slots", asyncio.Semaphore(3))
         # запись в историю - не предмет этих тестов: пользователя в базе нет
-        monkeypatch.setattr(dl, "get_db", self._empty_db)
+        monkeypatch.setattr(dl, "session_scope", self._empty_db)
 
         self.message = MagicMock()
         self.message.answer = AsyncMock(return_value=self.processing)
-        self.message.answer_video = AsyncMock(side_effect=lambda *a, **k: self.calls.append("video"))
+        self.message.answer_video = AsyncMock(
+            side_effect=lambda *a, **k: self.calls.append("video")
+        )
 
     @staticmethod
+    @asynccontextmanager
     async def _empty_db():
         session = MagicMock()
-        session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+        session.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
         session.commit = AsyncMock()
         yield session
 
@@ -137,8 +176,13 @@ class Env:
         workdir = new_workdir("youtube")
         f = workdir / "youtube_abc.mp4"
         f.write_bytes(b"x" * 16)
-        return {"success": True, "file_path": str(f), "content_type": "video", "file_size": size,
-                "title": "Ролик"}, workdir
+        return {
+            "success": True,
+            "file_path": str(f),
+            "content_type": "video",
+            "file_size": size,
+            "title": "Ролик",
+        }, workdir
 
     async def run(self, **extra):
         await dl.deliver(
@@ -168,7 +212,9 @@ async def test_fits_refusal_returns_slot_and_sends_nothing(env):
     await env.run(fits=env.fits, on_delivered=env.on_delivered)
 
     env.fits.assert_awaited_once_with(60 * MB)
-    env.processing.edit_text.assert_awaited_once_with("Файл не влезает\n<i>Попытка не списана.</i>")
+    env.processing.edit_text.assert_awaited_once_with(
+        "Файл не влезает\n<i>Попытка не списана.</i>"
+    )
     env.message.answer_video.assert_not_awaited()
     env.on_delivered.assert_not_awaited()
     env.release.assert_awaited_once()
@@ -230,7 +276,9 @@ async def test_on_delivered_not_called_when_telegram_send_fails(env):
 
     env.on_delivered.assert_not_awaited()
     env.release.assert_awaited_once()
-    env.processing.edit_text.assert_awaited_once_with("Что-то пошло не так. Попробуйте ещё раз чуть позже.\n<i>Попытка не списана.</i>")
+    env.processing.edit_text.assert_awaited_once_with(
+        "Что-то пошло не так. Попробуйте ещё раз чуть позже.\n<i>Попытка не списана.</i>"
+    )
     assert not workdir.exists()
 
 
@@ -251,7 +299,9 @@ async def test_on_delivered_error_after_sending_does_not_return_slot(env):
     env.downloader.return_value = result
     env.on_delivered.side_effect = RuntimeError("db down")
 
-    await env.run(fits=env.fits, on_delivered=env.on_delivered)  # исключение наружу не летит
+    await env.run(
+        fits=env.fits, on_delivered=env.on_delivered
+    )  # исключение наружу не летит
 
     env.message.answer_video.assert_awaited_once()
     env.release.assert_not_awaited()  # файл уже у людей - слот потрачен
@@ -298,13 +348,21 @@ class Flow:
         workdir = new_workdir("youtube")
         f = workdir / "youtube_abc.mp4"
         f.write_bytes(b"x")
-        return {"success": True, "file_path": str(f), "content_type": "video", "file_size": size, "title": "T"}
+        return {
+            "success": True,
+            "file_path": str(f),
+            "content_type": "video",
+            "file_size": size,
+            "title": "T",
+        }
 
     async def command(self, size):
         self.downloader.return_value = self.result(size)
         m = self.message()
         await group.group_download(
-            m, SimpleNamespace(args="https://youtu.be/abc", command="sr_dl"), user=SimpleNamespace(id=7)
+            m,
+            SimpleNamespace(args="https://youtu.be/abc", command="sr_dl"),
+            user=SimpleNamespace(id=7),
         )
         return m
 
@@ -328,7 +386,11 @@ async def test_group_flow_delivery_is_counted_against_chat_and_history(flow, db)
 
     m.answer_video.assert_awaited_once()
     chat = await flow.chat()
-    assert (chat.downloads_today, chat.bytes_today, chat.total_downloads) == (1, MB // 2, 1)
+    assert (chat.downloads_today, chat.bytes_today, chat.total_downloads) == (
+        1,
+        MB // 2,
+        1,
+    )
     async with db() as s:
         history = (await s.execute(Download.__table__.select())).all()
         user = await s.get(User, 7)
@@ -357,7 +419,9 @@ async def test_group_flow_count_limit_stops_third_download(flow):
 
     third.answer_video.assert_not_awaited()
     text = third.answer.await_args.args[0]
-    assert text.startswith("<b>Лимит чата на сегодня исчерпан</b> - 2 скачивания или 1,0 МБ.")
+    assert text.startswith(
+        "<b>Лимит чата на сегодня исчерпан</b> - 2 скачивания или 1,0 МБ."
+    )
     assert "/sr_premium" in text
     chat = await flow.chat()
     assert (chat.downloads_today, chat.total_downloads) == (2, 2)

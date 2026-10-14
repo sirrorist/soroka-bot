@@ -1,24 +1,26 @@
-#!/usr/bin/env python3
-"""Test imports to verify structure."""
+"""Пакет загрузчиков импортируется целиком и узнаёт площадку по ссылке."""
 
-from downloaders import (
-    download_tiktok,
-    download_youtube,
-    download_instagram,
-    download_twitter,
-    detect_platform,
+import pytest
+
+import downloaders
+from downloaders import detect_platform
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["download_tiktok", "download_youtube", "download_instagram", "download_twitter"],
 )
+def test_downloader_exported(name):
+    assert callable(getattr(downloaders, name))
 
-print("\nTesting detect_platform...")
-test_urls = {
-    "https://youtu.be/dQw4w9WgXcQ": "youtube",
-    "https://tiktok.com/@user/video/123": "tiktok",
-    "https://instagram.com/p/ABC123/": "instagram",
-}
 
-for url, expected in test_urls.items():
-    detected = detect_platform(url)
-    assert detected == expected, f"Failed for {url}: got {detected}, expected {expected}"
-    print(f"  ✅ {url} → {detected}")
-
-print("\n🎉 All imports working correctly!")
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://youtu.be/dQw4w9WgXcQ", "youtube"),
+        ("https://tiktok.com/@user/video/123", "tiktok"),
+        ("https://instagram.com/p/ABC123/", "instagram"),
+    ],
+)
+def test_detect_platform(url, expected):
+    assert detect_platform(url) == expected

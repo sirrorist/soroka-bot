@@ -3,6 +3,7 @@
 Наш текст (лимит размера и времени) показывается как есть; английский текст yt-dlp
 пользователю не уходит, он только в логе.
 """
+
 import pytest
 from loguru import logger
 
@@ -33,7 +34,10 @@ def test_limit_error_wrapped_as_cause_is_found():
         except DownloadLimitError as inner:
             raise RuntimeError(YTDLP_TEXT) from inner
     except RuntimeError as outer:
-        assert user_reason(outer, FALLBACK, "tiktok") == "скачивание заняло слишком много времени"
+        assert (
+            user_reason(outer, FALLBACK, "tiktok")
+            == "скачивание заняло слишком много времени"
+        )
 
 
 def test_limit_error_as_explicit_cause_only_is_found():
@@ -63,7 +67,9 @@ def test_foreign_error_gets_fallback_and_english_text_never_reaches_user():
 
 def test_foreign_error_text_goes_to_log_without_error_prefix(log_lines):
     user_reason(RuntimeError(YTDLP_TEXT), FALLBACK, "youtube")
-    assert log_lines == ["youtube download error: [youtube] dQw4w9WgXcQ: Sign in to confirm you're not a bot"]
+    assert log_lines == [
+        "youtube download error: [youtube] dQw4w9WgXcQ: Sign in to confirm you're not a bot"
+    ]
 
 
 def test_log_line_is_cut_to_200_chars(log_lines):
@@ -82,7 +88,9 @@ def test_foreign_error_with_unrelated_cause_gets_fallback():
 
 
 def test_braces_in_foreign_error_do_not_break_logging(log_lines):
-    assert user_reason(RuntimeError("bad {format} {0}"), FALLBACK, "youtube") == FALLBACK
+    assert (
+        user_reason(RuntimeError("bad {format} {0}"), FALLBACK, "youtube") == FALLBACK
+    )
     assert log_lines == ["youtube download error: bad {format} {0}"]
 
 

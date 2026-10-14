@@ -1,24 +1,26 @@
 """Download handlers."""
+
 import asyncio
 from collections.abc import Awaitable, Callable
 from html import escape
-from aiogram import Router, F, Dispatcher
-from aiogram.enums import ChatType
-from aiogram.types import Message, FSInputFile
-from aiogram.filters import Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-from sqlalchemy import func, select, update
-from loguru import logger
 
-from database import get_db, User, Download
+from aiogram import Dispatcher, F, Router
+from aiogram.enums import ChatType
+from aiogram.filters import Command
+from aiogram.types import FSInputFile, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from loguru import logger
+from sqlalchemy import func, select, update
+
+from config import settings
+from database import Download, User, session_scope
 from downloaders import (
-    download_tiktok,
-    download_youtube,
     download_instagram,
+    download_tiktok,
     download_twitter,
+    download_youtube,
 )
 from downloaders.common import extract_url, max_send_mb, remove_workdir
-from config import settings
 from utils.i18n import t
 
 router = Router()
@@ -40,8 +42,7 @@ async def _reserve_download(user_id: int, limit: int) -> bool:
     """Занять одно скачивание из лимита до начала загрузки. False - лимит исчерпан."""
     downloads_today = func.coalesce(User.downloads_today, 0)
     reserved = False
-    # break, а не return: иначе генератор get_db не закроется и сессия повиснет
-    async for session in get_db():
+    async with session_scope() as session:
         result = await session.execute(
             update(User)
             .where(User.id == user_id, downloads_today < limit)
@@ -49,25 +50,33 @@ async def _reserve_download(user_id: int, limit: int) -> bool:
         )
         await session.commit()
         reserved = result.rowcount == 1
-        break
     return reserved
 
 
 async def _release_download(user_id: int) -> None:
     """Вернуть занятое скачивание, если файл так и не ушёл пользователю."""
-    async for session in get_db():
+    async with session_scope() as session:
         await session.execute(
             update(User)
             .where(User.id == user_id, User.downloads_today > 0)
             .values(downloads_today=User.downloads_today - 1)
         )
         await session.commit()
-        break
 
 
 # Названия, которые загрузчики подставляют, когда у ролика своего нет
-_PLACEHOLDER_TITLES = {"TikTok Video", "YouTube Content", "Instagram Content", "Twitter Content"}
-_PLATFORM_NAMES = {"tiktok": "TikTok", "youtube": "YouTube", "instagram": "Instagram", "twitter": "X"}
+_PLACEHOLDER_TITLES = {
+    "TikTok Video",
+    "YouTube Content",
+    "Instagram Content",
+    "Twitter Content",
+}
+_PLATFORM_NAMES = {
+    "tiktok": "TikTok",
+    "youtube": "YouTube",
+    "instagram": "Instagram",
+    "twitter": "X",
+}
 # подпись к файлу в Telegram - до 1024 символов; название ролика бывает длинным
 _TITLE_MAX = 200
 
@@ -76,7 +85,10 @@ def _caption(title: str | None, platform: str, url: str) -> str:
     """Подпись к файлу: название ролика ссылкой на оригинал (слово владельца 2026-09-30)."""
     title = " ".join((title or "").split())
     if not title or title in _PLACEHOLDER_TITLES:
-        title = t("download.caption_fallback", platform=_PLATFORM_NAMES.get(platform, platform))
+        title = t(
+            "download.caption_fallback",
+            platform=_PLATFORM_NAMES.get(platform, platform),
+        )
     elif len(title) > _TITLE_MAX:
         title = title[:_TITLE_MAX].rstrip() + "..."
     return f'<a href="{escape(url, quote=True)}">{escape(title)}</a>'
@@ -100,7 +112,11 @@ def limit_text(premium: bool) -> str:
     """
     if premium:
         return t("download.limit_premium", premium=settings.premium_user_limit)
-    return t("download.limit_free", free=settings.free_user_limit, premium=settings.premium_user_limit)
+    return t(
+        "download.limit_free",
+        free=settings.free_user_limit,
+        premium=settings.premium_user_limit,
+    )
 
 
 def register_download_handlers(dp: Dispatcher) -> None:
@@ -140,7 +156,10 @@ async def handle_url(message: Message, user: User = None, rate_limited: bool = F
     user_is_premium = user.is_premium
 
     if rate_limited:
-        await message.answer(limit_text(user_is_premium), reply_markup=None if user_is_premium else _limit_keyboard())
+        await message.answer(
+            limit_text(user_is_premium),
+            reply_markup=None if user_is_premium else _limit_keyboard(),
+        )
         return
 
     # В загрузчик уходит только ссылка на известную площадку, а не весь текст
@@ -205,7 +224,9 @@ async def deliver(
         raise
     if not reserved:
         _active_users.discard(slot)
-        await message.answer(limit_text, reply_markup=None if premium else _limit_keyboard())
+        await message.answer(
+            limit_text, reply_markup=None if premium else _limit_keyboard()
+        )
         return
 
     delivered = False
@@ -222,7 +243,9 @@ async def deliver(
         if not result.get("success"):
             error = str(result.get("error") or t("download.unknown_reason"))
             # текст ошибки приходит от yt-dlp и сайта - в HTML только экранированным
-            await processing_msg.edit_text(f"{t('download.failed', reason=escape(error[:300]))}\n{_not_spent()}")
+            await processing_msg.edit_text(
+                f"{t('download.failed', reason=escape(error[:300]))}\n{_not_spent()}"
+            )
             logger.info(
                 f"Download failed for user {user_id} (premium: {user_is_premium}) "
                 f"from {platform}: {error}"
@@ -261,7 +284,7 @@ async def deliver(
         processing_msg = None  # удалено - в except его уже не править
 
         # Update user stats. downloads_today уже увеличен в _reserve_download
-        async for session in get_db():
+        async with session_scope() as session:
             # Refresh user to get current values
             db_result = await session.execute(select(User).where(User.id == user_id))
             fresh_user = db_result.scalar_one_or_none()
@@ -271,22 +294,23 @@ async def deliver(
                 fresh_user.total_downloads = (fresh_user.total_downloads or 0) + 1
 
                 # Save download history
-                session.add(Download(
-                    user_id=user_id,
-                    platform=platform,
-                    url=url,
-                    content_type=result["content_type"],
-                    file_size=result.get("file_size"),
-                    status="completed",
-                ))
+                session.add(
+                    Download(
+                        user_id=user_id,
+                        platform=platform,
+                        url=url,
+                        content_type=result["content_type"],
+                        file_size=result.get("file_size"),
+                        status="completed",
+                    )
+                )
                 await session.commit()
-                
+
                 # Log успешного скачивания с указанием premium статуса
                 logger.info(
                     f"Download completed for user {user_id} (premium: {user_is_premium}): "
                     f"{platform} - {file_size_mb:.1f}MB"
                 )
-            break
 
         if on_delivered:
             await on_delivered(result.get("file_size") or 0)

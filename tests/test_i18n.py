@@ -3,6 +3,7 @@
 Ключи, которые код передаёт в t("..."), находятся разбором исходников (ast), а не
 списком в тесте: новый ключ без текста в locales/ роняет тест сам.
 """
+
 import ast
 import re
 import string
@@ -20,7 +21,17 @@ RU_ONLY = {"premium.admin", "premium.target_self", "premium.target_chat"}
 # подсказка "как переключить на английский" показывается только при русском языке
 # (handlers/start.py), поэтому в en.toml она намеренно пустая
 EMPTY_OK = {("en", "start.lang_hint")}
-SKIP_DIRS = {"tests", "Docs", ".git", "__pycache__", ".ruff_cache", "storage", "temp", ".claude", "scripts"}
+SKIP_DIRS = {
+    "tests",
+    "Docs",
+    ".git",
+    "__pycache__",
+    ".ruff_cache",
+    "storage",
+    "temp",
+    ".claude",
+    "scripts",
+}
 
 
 def flatten(node, prefix=""):
@@ -53,7 +64,11 @@ def t_calls():
     """Все вызовы t(...) в коде: (файл, строка, узел)."""
     for path in source_files():
         for node in ast.walk(ast.parse(path.read_text("utf-8"))):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "t":
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "t"
+            ):
                 yield path.relative_to(ROOT), node.lineno, node
 
 
@@ -68,7 +83,10 @@ def test_toml_files_on_disk_are_the_ones_loaded():
     on_disk = sorted(p.stem for p in (ROOT / "locales").glob("*.toml"))
     assert on_disk == sorted(TEXTS)
     for lang in on_disk:  # и читаются они как TOML, а не подменены в памяти
-        assert tomllib.loads((ROOT / "locales" / f"{lang}.toml").read_text("utf-8")) == TEXTS[lang]
+        assert (
+            tomllib.loads((ROOT / "locales" / f"{lang}.toml").read_text("utf-8"))
+            == TEXTS[lang]
+        )
 
 
 def test_key_sets_of_ru_and_en_match_except_ru_only_keys():
@@ -95,7 +113,8 @@ def test_html_tags_match_between_languages(key):
 @pytest.mark.parametrize("lang", ["ru", "en"])
 def test_no_empty_texts(lang):
     empty = [
-        k for k, v in flat(lang).items()
+        k
+        for k, v in flat(lang).items()
         if (not isinstance(v, str) or not v.strip()) and (lang, k) not in EMPTY_OK
     ]
     assert empty == []
@@ -141,14 +160,19 @@ def test_arguments_passed_to_t_match_placeholders_of_the_text():
     problems = []
     for path, line, node in t_calls():
         arg = node.args[0]
-        if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)) or arg.value not in ru:
+        if (
+            not (isinstance(arg, ast.Constant) and isinstance(arg.value, str))
+            or arg.value not in ru
+        ):
             continue
         if any(kw.arg is None for kw in node.keywords):
             continue  # **kwargs - состав неизвестен
         passed = {kw.arg for kw in node.keywords} - {"lang"}
         needed = placeholders(ru[arg.value])
         if passed != needed:
-            problems.append(f"{path}:{line} {arg.value}: передано {sorted(passed)}, в тексте {sorted(needed)}")
+            problems.append(
+                f"{path}:{line} {arg.value}: передано {sorted(passed)}, в тексте {sorted(needed)}"
+            )
     assert problems == []
 
 
@@ -157,10 +181,15 @@ def test_menu_keys_built_dynamically_exist_and_fit_telegram_limits():
 
     for lang in ("ru", "en"):
         texts = flat(lang)
-        keys = [f"menu.{n}" for n in PRIVATE_COMMANDS] + [f"menu.group_{n}" for n in GROUP_COMMANDS]
+        keys = [f"menu.{n}" for n in PRIVATE_COMMANDS] + [
+            f"menu.group_{n}" for n in GROUP_COMMANDS
+        ]
         for key in keys:
             assert key in texts, (lang, key)
-            assert 3 <= len(texts[key]) <= 256, (lang, key)  # лимит описания команды в Bot API
+            assert 3 <= len(texts[key]) <= 256, (
+                lang,
+                key,
+            )  # лимит описания команды в Bot API
 
 
 # ---------- t() ----------
@@ -191,7 +220,10 @@ def test_t_falls_back_to_russian_when_key_absent_in_english():
 
 
 def test_t_falls_back_to_russian_for_partial_english_table(monkeypatch):
-    partial = {"en": {"only": {"here": "H"}}, "ru": {"only": {"here": "Р", "there": "Т"}}}
+    partial = {
+        "en": {"only": {"here": "H"}},
+        "ru": {"only": {"here": "Р", "there": "Т"}},
+    }
     monkeypatch.setattr(i18n, "TEXTS", partial)
     assert t("only.here", lang="en") == "H"
     assert t("only.there", lang="en") == "Т"
@@ -244,10 +276,19 @@ def test_set_lang_ignores_unknown_language():
 @pytest.mark.parametrize(
     "code, expected",
     [
-        ("ru", "ru"), ("uk", "ru"), ("be", "ru"), ("kk", "ru"),
-        ("ru-RU", "ru"), ("RU", "ru"), ("uk-UA", "ru"),
-        ("en", "en"), ("en-US", "en"), ("de", "en"), ("zh-hans", "en"),
-        (None, "en"), ("", "en"),
+        ("ru", "ru"),
+        ("uk", "ru"),
+        ("be", "ru"),
+        ("kk", "ru"),
+        ("ru-RU", "ru"),
+        ("RU", "ru"),
+        ("uk-UA", "ru"),
+        ("en", "en"),
+        ("en-US", "en"),
+        ("de", "en"),
+        ("zh-hans", "en"),
+        (None, "en"),
+        ("", "en"),
     ],
 )
 def test_lang_for(code, expected):

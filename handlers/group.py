@@ -6,9 +6,9 @@
 Ответ уходит в тот же топик сам: Message.answer в aiogram подставляет
 message_thread_id, если сообщение пришло из топика.
 """
+
 import asyncio
 from html import escape
-from datetime import datetime
 
 from aiogram import Dispatcher, F, Router
 from aiogram.enums import ChatType
@@ -20,11 +20,12 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from config import settings
-from database import Chat, User, get_db
+from database import Chat, User, session_scope
 from downloaders.common import extract_url
 from handlers import download as dl
 from handlers import steam
 from handlers.premium import prices, request_keyboard
+from utils.clock import utcnow
 from utils.i18n import t
 from utils.text import bar, download_word, downloads_word, short_name, size_text
 
@@ -41,8 +42,6 @@ router.message.filter(F.chat.type.in_(GROUPS))
 router.callback_query.filter(F.message.chat.type.in_(GROUPS))
 
 
-
-
 def register_group_handlers(dp: Dispatcher) -> None:
     """Register group handlers."""
     dp.include_router(router)
@@ -52,7 +51,7 @@ def chat_is_premium(chat: Chat) -> bool:
     """Premium чата: флаг и срок, если он задан."""
     if not chat.is_premium:
         return False
-    return chat.premium_until is None or chat.premium_until > datetime.utcnow()
+    return chat.premium_until is None or chat.premium_until > utcnow()
 
 
 def chat_limits(premium: bool) -> tuple[int, int]:
@@ -64,9 +63,9 @@ def chat_limits(premium: bool) -> tuple[int, int]:
 
 async def get_chat(tg_chat: TgChat) -> Chat:
     """Строка чата: создаётся при первой команде, счётчики - за сегодня."""
-    today = datetime.utcnow().date()
+    today = utcnow().date()
     chat = None
-    async for session in get_db():
+    async with session_scope() as session:
         chat = await session.get(Chat, tg_chat.id)
         if chat is None:
             session.add(Chat(id=tg_chat.id, title=tg_chat.title, day=today))
@@ -81,13 +80,12 @@ async def get_chat(tg_chat: TgChat) -> Chat:
         await _roll_day(session, tg_chat.id)
         await session.commit()
         chat = await session.get(Chat, tg_chat.id, populate_existing=True)
-        break
     return chat
 
 
 async def _roll_day(session, chat_id: int) -> None:
     """Наступил другой день - счётчики с нуля. Условие по day делает это один раз."""
-    today = datetime.utcnow().date()
+    today = utcnow().date()
     await session.execute(
         update(Chat)
         .where(Chat.id == chat_id, or_(Chat.day.is_(None), Chat.day != today))
@@ -107,49 +105,58 @@ async def migrate_chat(old_id: int, new_id: int, title: str | None) -> None:
 
 
 async def _migrate_chat(old_id: int, new_id: int, title: str | None) -> None:
-    async for session in get_db():
+    async with session_scope() as session:
         old = await session.get(Chat, old_id)
         if old is None:
-            break
+            return
         new = await session.get(Chat, new_id)
         if new is None:
-            session.add(Chat(
-                id=new_id,
-                title=title or old.title,
-                is_premium=old.is_premium,
-                premium_until=old.premium_until,
-                day=old.day,
-                downloads_today=old.downloads_today,
-                bytes_today=old.bytes_today,
-                total_downloads=old.total_downloads,
-                created_at=old.created_at,
-            ))
+            session.add(
+                Chat(
+                    id=new_id,
+                    title=title or old.title,
+                    is_premium=old.is_premium,
+                    premium_until=old.premium_until,
+                    day=old.day,
+                    downloads_today=old.downloads_today,
+                    bytes_today=old.bytes_today,
+                    total_downloads=old.total_downloads,
+                    created_at=old.created_at,
+                )
+            )
         else:
             if chat_is_premium(old) and not chat_is_premium(new):
                 new.is_premium = True
                 new.premium_until = old.premium_until
-            new.total_downloads = (new.total_downloads or 0) + (old.total_downloads or 0)
+            new.total_downloads = (new.total_downloads or 0) + (
+                old.total_downloads or 0
+            )
         await session.delete(old)
         try:
             await session.commit()
         except IntegrityError:
             await session.rollback()
         logger.info(f"Chat {old_id} migrated to {new_id}")
-        break
 
 
 @router.message(F.migrate_to_chat_id)
 async def on_migrate_to(message: Message):
     """Служебное сообщение в старой группе: она переехала в супергруппу."""
-    logger.info(f"Migrate service message: {message.chat.id} -> {message.migrate_to_chat_id}")
+    logger.info(
+        f"Migrate service message: {message.chat.id} -> {message.migrate_to_chat_id}"
+    )
     await migrate_chat(message.chat.id, message.migrate_to_chat_id, None)
 
 
 @router.message(F.migrate_from_chat_id)
 async def on_migrate_from(message: Message):
     """Служебное сообщение в новой супергруппе: откуда она переехала."""
-    logger.info(f"Migrate service message: {message.migrate_from_chat_id} -> {message.chat.id}")
-    await migrate_chat(message.migrate_from_chat_id, message.chat.id, message.chat.title)
+    logger.info(
+        f"Migrate service message: {message.migrate_from_chat_id} -> {message.chat.id}"
+    )
+    await migrate_chat(
+        message.migrate_from_chat_id, message.chat.id, message.chat.title
+    )
 
 
 async def _reserve_chat(chat_id: int, limit: int, daily_bytes: int) -> bool:
@@ -157,48 +164,53 @@ async def _reserve_chat(chat_id: int, limit: int, daily_bytes: int) -> bool:
     downloads_today = func.coalesce(Chat.downloads_today, 0)
     bytes_today = func.coalesce(Chat.bytes_today, 0)
     reserved = False
-    # break, а не return: иначе генератор get_db не закроется и сессия повиснет
-    async for session in get_db():
+    async with session_scope() as session:
         await _roll_day(session, chat_id)
         result = await session.execute(
             update(Chat)
-            .where(Chat.id == chat_id, downloads_today < limit, bytes_today < daily_bytes)
+            .where(
+                Chat.id == chat_id, downloads_today < limit, bytes_today < daily_bytes
+            )
             .values(downloads_today=downloads_today + 1)
         )
         await session.commit()
         reserved = result.rowcount == 1
-        break
     return reserved
 
 
 async def _release_chat(chat_id: int) -> None:
     """Вернуть занятое скачивание: файл так и не ушёл в чат."""
-    async for session in get_db():
+    async with session_scope() as session:
         await session.execute(
             update(Chat)
             .where(Chat.id == chat_id, Chat.downloads_today > 0)
             .values(downloads_today=Chat.downloads_today - 1)
         )
         await session.commit()
-        break
 
 
 async def _chat_fits(chat_id: int, daily_bytes: int, size: int) -> str | None:
     """Отказ, если скачанный файл не влезает в остаток дневного объёма чата."""
     used = 0
-    async for session in get_db():
-        used = await session.scalar(
-            select(func.coalesce(Chat.bytes_today, 0)).where(Chat.id == chat_id)
-        ) or 0
-        break
+    async with session_scope() as session:
+        used = (
+            await session.scalar(
+                select(func.coalesce(Chat.bytes_today, 0)).where(Chat.id == chat_id)
+            )
+            or 0
+        )
     if used + size <= daily_bytes:
         return None
-    return t("group.not_fits", size=size_text(size), left=size_text(max(daily_bytes - used, 0)))
+    return t(
+        "group.not_fits",
+        size=size_text(size),
+        left=size_text(max(daily_bytes - used, 0)),
+    )
 
 
 async def _chat_delivered(chat_id: int, size: int) -> None:
     """Учесть отправленный файл: объём за день и всего скачиваний."""
-    async for session in get_db():
+    async with session_scope() as session:
         await session.execute(
             update(Chat)
             .where(Chat.id == chat_id)
@@ -208,7 +220,6 @@ async def _chat_delivered(chat_id: int, size: int) -> None:
             )
         )
         await session.commit()
-        break
 
 
 def _link_from(message: Message, command: CommandObject) -> tuple[str, str] | None:
@@ -236,7 +247,9 @@ async def group_download(message: Message, command: CommandObject, user: User = 
     chat_id = chat.id
     premium = chat_is_premium(chat)
     limit, daily_bytes = chat_limits(premium)
-    limit_text = t("group.limit", downloads=downloads_word(limit), size=size_text(daily_bytes))
+    limit_text = t(
+        "group.limit", downloads=downloads_word(limit), size=size_text(daily_bytes)
+    )
     if not premium:
         limit_text += t("group.limit_upsell", p=P)
 
@@ -291,10 +304,21 @@ async def group_stats(event: Message | CallbackQuery):
         f"{t('group.stats_title')}\n"
         f"{escape(short_name(tg_chat.title))} · {plan}\n\n"
         f"{t('stats.today')}\n"
-        + t("group.stats_downloads", bar=bar(today, limit), today=today, limit=limit,
-            word=download_word(limit)) + "\n"
-        + t("group.stats_bytes", bar=bar(used, daily_bytes), used=size_text(used),
-            daily=size_text(daily_bytes)) + "\n"
+        + t(
+            "group.stats_downloads",
+            bar=bar(today, limit),
+            today=today,
+            limit=limit,
+            word=download_word(limit),
+        )
+        + "\n"
+        + t(
+            "group.stats_bytes",
+            bar=bar(used, daily_bytes),
+            used=size_text(used),
+            daily=size_text(daily_bytes),
+        )
+        + "\n"
         + f"{t('common.reset')}\n\n{t('stats.total')}\n"
         + t("group.stats_total_line", count=total, word=download_word(total))
     )
@@ -321,9 +345,13 @@ async def group_premium(event: Message | CallbackQuery):
         limit, daily_bytes = chat_limits(True)
         text = t(
             "group.premium_offer",
-            free_downloads=downloads_word(free_limit), free_size=size_text(free_bytes),
-            downloads=downloads_word(limit), size=size_text(daily_bytes),
-            prices=prices(settings.chat_premium_price_month, settings.chat_premium_price_year),
+            free_downloads=downloads_word(free_limit),
+            free_size=size_text(free_bytes),
+            downloads=downloads_word(limit),
+            size=size_text(daily_bytes),
+            prices=prices(
+                settings.chat_premium_price_month, settings.chat_premium_price_year
+            ),
         )
         keyboard = request_keyboard()
     if isinstance(event, CallbackQuery):

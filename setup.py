@@ -1,4 +1,5 @@
 """Setup script to initialize directories and check dependencies."""
+
 # import os
 from pathlib import Path
 
@@ -10,7 +11,7 @@ def create_directories():
         "storage",
         "logs",
     ]
-    
+
     for directory in directories:
         Path(directory).mkdir(parents=True, exist_ok=True)
         print(f"[OK] Created directory: {directory}")

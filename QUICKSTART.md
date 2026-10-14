@@ -68,7 +68,8 @@ docker-compose up -d db redis
 # Создание необходимых директорий
 python setup.py
 
-# Инициализация базы данных (произойдет автоматически при первом запуске)
+# Таблицы базы данных - миграциями; бот без них не запустится
+alembic upgrade head
 ```
 
 ### 5. Запуск бота
@@ -103,7 +104,9 @@ python main.py
 cp env_template.txt .env
 # Отредактируйте .env
 
-# Запуск всех сервисов
+# Сборка, таблицы базы данных, запуск всех сервисов
+docker-compose build
+docker-compose run --rm bot alembic upgrade head
 docker-compose up -d
 
 # Просмотр логов

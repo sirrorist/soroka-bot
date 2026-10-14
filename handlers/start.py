@@ -1,4 +1,5 @@
 """Start command handlers. Тексты - в locales/."""
+
 from aiogram import Dispatcher, F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
@@ -33,7 +34,11 @@ async def cmd_start(message: Message):
         free=settings.free_user_limit,
     )
     # по умолчанию бот русский; тем, у кого Telegram на другом языке, - как переключить
-    if get_lang() == DEFAULT_LANG and lang_for(message.from_user and message.from_user.language_code) != DEFAULT_LANG:
+    if (
+        get_lang() == DEFAULT_LANG
+        and lang_for(message.from_user and message.from_user.language_code)
+        != DEFAULT_LANG
+    ):
         text += t("start.lang_hint")
     await message.answer(text, reply_markup=keyboard.as_markup())
 

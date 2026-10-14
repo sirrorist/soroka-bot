@@ -1,4 +1,5 @@
 """/sdate - сколько человек играл в Steam за последние две недели. Тексты - в locales/."""
+
 import asyncio
 import time
 from html import escape
@@ -42,7 +43,9 @@ def format_playtime(stats: dict) -> str:
             return t("steam.closed", name=name)
         return t("steam.empty", name=name)
     total = sum(minutes for _, minutes in games)
-    lines = "\n".join(f"{escape(title)} - {_hours(minutes)}" for title, minutes in games[:TOP])
+    lines = "\n".join(
+        f"{escape(title)} - {_hours(minutes)}" for title, minutes in games[:TOP]
+    )
     text = t("steam.result", name=name, total=_hours(total), games=lines)
     if len(games) > TOP:
         text += t("steam.more", count=len(games) - TOP)

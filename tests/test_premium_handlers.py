@@ -4,6 +4,7 @@ Telegram не нужен: callback, бот и часы - подставные. �
 ADMIN_ID, не чаще раза в час, имена экранируются, при сбое отправки человек может
 повторить.
 """
+
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -39,7 +40,14 @@ def admin(monkeypatch):
     monkeypatch.setattr(settings, "admin_id", ADMIN)
 
 
-def make_callback(user_id=5, username="anya", full_name="Аня К", chat_type="private", title=None, chat_id=5):
+def make_callback(
+    user_id=5,
+    username="anya",
+    full_name="Аня К",
+    chat_type="private",
+    title=None,
+    chat_id=5,
+):
     cb = MagicMock()
     cb.from_user = SimpleNamespace(id=user_id, username=username, full_name=full_name)
     cb.message.chat = SimpleNamespace(type=chat_type, title=title, id=chat_id)
@@ -54,7 +62,7 @@ def sent_text(cb):
 
 
 ADMIN_PRIVATE = (
-    '⭐ <b>Заявка на Premium</b>\n\n<b>От:</b> @anya (Аня К)\n<b>ID:</b> <code>5</code>\n'
+    "⭐ <b>Заявка на Premium</b>\n\n<b>От:</b> @anya (Аня К)\n<b>ID:</b> <code>5</code>\n"
     '<b>Для:</b> лично для себя\n\n<a href="tg://user?id=5">Открыть профиль</a>'
 )
 
@@ -66,7 +74,9 @@ async def test_no_admin_id_refuses_and_sends_nothing(clock, monkeypatch, admin_i
     cb = make_callback()
     await premium.premium_confirm(cb)
     cb.bot.send_message.assert_not_awaited()
-    cb.answer.assert_awaited_once_with("Заявки пока не принимаются. Попробуйте позже.", show_alert=True)
+    cb.answer.assert_awaited_once_with(
+        "Заявки пока не принимаются. Попробуйте позже.", show_alert=True
+    )
     cb.message.edit_text.assert_not_awaited()
     assert premium._last_request == {}
 
@@ -143,7 +153,10 @@ async def test_group_request_names_the_chat_and_escapes_title(clock):
     cb = make_callback(chat_type="supergroup", title='<i>"Чат"</i>', chat_id=-1001234)
     await premium.premium_confirm(cb)
     text = sent_text(cb)
-    assert '<b>Для:</b> для чата "&lt;i&gt;&quot;Чат&quot;&lt;/i&gt;" (<code>-1001234</code>)' in text
+    assert (
+        '<b>Для:</b> для чата "&lt;i&gt;&quot;Чат&quot;&lt;/i&gt;" (<code>-1001234</code>)'
+        in text
+    )
     assert "лично для себя" not in text
 
 
@@ -168,7 +181,10 @@ async def test_admin_message_stays_russian_when_user_chose_english(clock):
     await premium.premium_confirm(cb)
     assert sent_text(cb) == ADMIN_PRIVATE
     # а человеку ответ - на его языке
-    assert cb.message.edit_text.await_args.args[0] != "✅ <b>Заявка отправлена.</b> Администратор скоро с Вами свяжется."
+    assert (
+        cb.message.edit_text.await_args.args[0]
+        != "✅ <b>Заявка отправлена.</b> Администратор скоро с Вами свяжется."
+    )
 
 
 @pytest.mark.asyncio
@@ -182,7 +198,9 @@ async def test_two_fast_presses_send_one_request(clock):
     first.bot.send_message.side_effect = slow_send
     second.bot.send_message.side_effect = slow_send
 
-    await asyncio.gather(premium.premium_confirm(first), premium.premium_confirm(second))
+    await asyncio.gather(
+        premium.premium_confirm(first), premium.premium_confirm(second)
+    )
 
     sent = first.bot.send_message.await_count + second.bot.send_message.await_count
     assert sent == 1
@@ -195,10 +213,14 @@ async def test_two_fast_presses_send_one_request(clock):
 @pytest.mark.asyncio
 async def test_send_failure_refuses_and_allows_retry(clock):
     cb = make_callback()
-    cb.bot.send_message.side_effect = RuntimeError("Forbidden: bot can't initiate conversation")
+    cb.bot.send_message.side_effect = RuntimeError(
+        "Forbidden: bot can't initiate conversation"
+    )
     await premium.premium_confirm(cb)
 
-    cb.answer.assert_awaited_once_with("Не получилось отправить заявку. Попробуйте позже.", show_alert=True)
+    cb.answer.assert_awaited_once_with(
+        "Не получилось отправить заявку. Попробуйте позже.", show_alert=True
+    )
     cb.message.edit_text.assert_not_awaited()  # "заявка отправлена" не показывается зря
     assert premium._last_request == {}
 
@@ -214,7 +236,9 @@ async def test_send_failure_logs_only_exception_type(clock):
     sink = logger.add(lambda m: lines.append(m.record["message"]), level="INFO")
     try:
         cb = make_callback()
-        cb.bot.send_message.side_effect = RuntimeError("secret chat_id=424242 token=abc")
+        cb.bot.send_message.side_effect = RuntimeError(
+            "secret chat_id=424242 token=abc"
+        )
         await premium.premium_confirm(cb)
     finally:
         logger.remove(sink)
@@ -236,9 +260,13 @@ async def test_request_asks_consent_and_warns_about_missing_username():
 
     without = make_callback(username=None)
     await premium.premium_request(without)
-    assert "У Вас не задан ник в Telegram" in without.message.edit_text.await_args.args[0]
+    assert (
+        "У Вас не задан ник в Telegram" in without.message.edit_text.await_args.args[0]
+    )
 
-    buttons = with_name.message.edit_text.await_args.kwargs["reply_markup"].inline_keyboard[0]
+    buttons = with_name.message.edit_text.await_args.kwargs[
+        "reply_markup"
+    ].inline_keyboard[0]
     assert [b.callback_data for b in buttons] == ["premium_confirm", "cancel"]
 
 

@@ -1,4 +1,5 @@
 """downloaders/common.py: каталог запроса, ограничения yt-dlp, отказ идти на чужие адреса."""
+
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,6 +22,7 @@ MB = 1024 * 1024
 
 
 # ---------- каталог запроса ----------
+
 
 def test_new_workdir_is_unique_direct_child_of_temp_dir(workroot):
     a = new_workdir("tiktok")
@@ -130,6 +132,7 @@ def test_find_file_takes_largest_of_several(tmp_path):
 
 # ---------- ydl_limits ----------
 
+
 def _guard(tmp_path, max_mb=None, platform="tiktok"):
     return ydl_limits(tmp_path, platform, max_mb=max_mb)["progress_hooks"][0]
 
@@ -193,7 +196,9 @@ def test_guard_raises_after_deadline_but_not_before(tmp_path, monkeypatch):
         guard({"downloaded_bytes": 1})
 
 
-def test_guard_deadline_counts_from_ydl_limits_call_not_from_hook_call(tmp_path, monkeypatch):
+def test_guard_deadline_counts_from_ydl_limits_call_not_from_hook_call(
+    tmp_path, monkeypatch
+):
     now = [0.0]
     monkeypatch.setattr(common, "time", SimpleNamespace(monotonic=lambda: now[0]))
     monkeypatch.setattr(settings, "download_timeout_s", 10)
@@ -207,7 +212,9 @@ def test_guard_deadline_counts_from_ydl_limits_call_not_from_hook_call(tmp_path,
         guard({})
 
 
-def test_match_filter_rejects_live_and_long_accepts_short_and_unknown_duration(tmp_path):
+def test_match_filter_rejects_live_and_long_accepts_short_and_unknown_duration(
+    tmp_path,
+):
     match = ydl_limits(tmp_path, "youtube")["match_filter"]
 
     assert match({"title": "t", "is_live": True}) is not None
@@ -218,6 +225,7 @@ def test_match_filter_rejects_live_and_long_accepts_short_and_unknown_duration(t
 
 
 # ---------- short_error ----------
+
 
 def test_short_error_returns_limit_message_from_cause_chain():
     try:
@@ -235,6 +243,7 @@ def test_short_error_strips_prefix_and_truncates():
 
 
 # ---------- интеграция: загрузчик не ходит на чужой адрес ----------
+
 
 class _Recorder(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
@@ -285,7 +294,9 @@ async def test_downloader_makes_no_request_to_local_server_and_leaves_no_files(
     # запросов" ничего бы не доказывал (сервер мог быть недоступен для yt-dlp).
     import yt_dlp
 
-    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True}) as ydl:
+    with yt_dlp.YoutubeDL(
+        {"quiet": True, "no_warnings": True, "skip_download": True}
+    ) as ydl:
         try:
             ydl.extract_info(url, download=False)
         except Exception:
