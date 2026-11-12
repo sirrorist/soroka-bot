@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .llm import LLMConfig
+
 
 @dataclass(frozen=True)
 class Subject:
@@ -32,6 +34,7 @@ class Settings:
     bindings: tuple[Binding, ...]
     db_path: Path = Path("/data/sobriety.sqlite3")
     expected_username: str | None = None
+    llm: LLMConfig | None = None
 
     def subjects_for(self, chat_id: int, thread_id: int | None) -> set[int]:
         return {b.user_id for b in self.bindings if b.matches(chat_id, thread_id)}
@@ -85,6 +88,7 @@ class Settings:
                 tuple(bindings),
                 Path(os.environ.get("SOBRIETY_DB_PATH", "/data/sobriety.sqlite3")),
                 expected_username,
+                LLMConfig.from_env(),
             )
         except (KeyError, ValueError, TypeError, AttributeError):
             raise SystemExit(

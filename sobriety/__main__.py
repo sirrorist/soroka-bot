@@ -9,6 +9,7 @@ from .api import ApiError, NetworkError, Telegram
 from .bot import Bot
 from .clock import UTC
 from .diagnostics import configure_logging, operation
+from .llm import ChatService
 from .settings import Settings
 from .store import Store
 
@@ -29,6 +30,7 @@ def main():
     signal.signal(signal.SIGINT, stop)
     api = Telegram(settings.token)
     with_store = Store(settings.db_path)
+    chat = ChatService(settings.llm, settings.token) if settings.llm else None
     try:
         identity = api.call("getMe")
         if (
@@ -44,9 +46,12 @@ def main():
             raise SystemExit(
                 "У бота настроен webhook. Проверьте отдельный токен счётчика."
             )
-        bot = Bot(settings, with_store, api, identity["username"])
+        bot = Bot(settings, with_store, api, identity["username"], chat=chat)
+        if chat:
+            chat.start()
+            log.info("Общение с ИИ включено")
         api.call("deleteMyCommands")
-        commands = [{"command": "sober", "description": "Открыть панель"}]
+        private_ids = {s.user_id for s in settings.subjects}
         scopes = {b.chat_id for b in settings.bindings} | {
             s.user_id for s in settings.subjects
         }
@@ -63,7 +68,7 @@ def main():
                 api.call(
                     "setMyCommands",
                     {
-                        "commands": commands,
+                        "commands": bot.commands(ai=chat_id in private_ids),
                         "scope": {"type": "chat", "chat_id": chat_id},
                     },
                 )
@@ -78,6 +83,7 @@ def main():
                 with_store.tick(
                     datetime.now(UTC), {s.user_id for s in settings.subjects}
                 )
+                bot.save_chat_turns()
                 with operation("outbox"):
                     bot.flush()
                 with operation("polling"):
@@ -86,7 +92,11 @@ def main():
                         {
                             "offset": with_store.offset(),
                             "timeout": 25,
-                            "allowed_updates": ["message", "callback_query"],
+                            "allowed_updates": [
+                                "message",
+                                "callback_query",
+                                "stopped_message_generation",
+                            ],
                         },
                         timeout=35,
                     )
@@ -138,6 +148,11 @@ def main():
             "Счётчик остановлен из-за ошибки; подробности в логах."
         ) from None
     finally:
+        if chat:
+            chat.shutdown()
+            bot_turns = chat.drain()
+            for uid, question, answer in bot_turns:
+                with_store.add_chat_turn(uid, question, answer, datetime.now(UTC))
         with_store.close()
         log.info("Счётчик остановлен; состояние сохранено")
 

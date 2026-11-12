@@ -337,7 +337,7 @@ def test_failed_outbox_does_not_prevent_polling_or_new_command(
     app.bot.api = api
     monkeypatch.setattr(runner.Settings, "from_env", lambda: app.bot.settings)
     monkeypatch.setattr(runner, "Store", lambda path: app.store)
-    monkeypatch.setattr(runner, "Bot", lambda *args: app.bot)
+    monkeypatch.setattr(runner, "Bot", lambda *args, **kwargs: app.bot)
     monkeypatch.setattr(runner, "Telegram", lambda token: api)
     monkeypatch.setattr(runner, "configure_logging", lambda settings: None)
     monkeypatch.setattr(

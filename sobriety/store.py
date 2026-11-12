@@ -11,6 +11,8 @@ from pathlib import Path
 from .clock import MILESTONES, UTC, accounting_date, elapsed, milestone_time
 
 DIALOG_TTL = 300
+CHAT_KEEP = 40  # stored messages per user; the prompt uses a smaller window
+CHAT_RETENTION = 30 * 86400  # seconds
 
 
 @dataclass(frozen=True)
@@ -81,6 +83,12 @@ class Store:
                 id INTEGER PRIMARY KEY, payload TEXT NOT NULL, sent INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+                content TEXT NOT NULL, created REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS chat_history_user ON chat_history(user_id, id);
             PRAGMA user_version=1;
         """)
         # Group interactions now only display information or hand off to private chat.
@@ -590,6 +598,36 @@ class Store:
             self.db.execute(
                 "DELETE FROM meta WHERE key=?", (f"outbox_retry:{item_id}",)
             )
+
+    def chat_history(self, uid, now):
+        """Recent AI conversation of one user, oldest first."""
+        self.db.execute(
+            "DELETE FROM chat_history WHERE created<?",
+            (now.timestamp() - CHAT_RETENTION,),
+        )
+        rows = self.db.execute(
+            "SELECT role, content FROM chat_history WHERE user_id=? "
+            "ORDER BY id DESC LIMIT ?",
+            (uid, CHAT_KEEP),
+        ).fetchall()
+        return [dict(r) for r in reversed(rows)]
+
+    def add_chat_turn(self, uid, question, answer, now):
+        with self.transaction():
+            for role, content in (("user", question), ("assistant", answer)):
+                self.db.execute(
+                    "INSERT INTO chat_history(user_id, role, content, created) "
+                    "VALUES (?, ?, ?, ?)",
+                    (uid, role, content, now.timestamp()),
+                )
+            self.db.execute(
+                "DELETE FROM chat_history WHERE user_id=? AND id NOT IN ("
+                "SELECT id FROM chat_history WHERE user_id=? ORDER BY id DESC LIMIT ?)",
+                (uid, uid, CHAT_KEEP),
+            )
+
+    def clear_chat(self, uid):
+        self.db.execute("DELETE FROM chat_history WHERE user_id=?", (uid,))
 
     def offset(self):
         row = self.db.execute("SELECT value FROM meta WHERE key='offset'").fetchone()

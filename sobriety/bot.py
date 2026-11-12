@@ -23,9 +23,10 @@ log = logging.getLogger("sobriety")
 
 
 class Bot:
-    def __init__(self, settings, store, api, username, now=None):
+    def __init__(self, settings, store, api, username, now=None, chat=None):
         self.settings, self.store, self.api = settings, store, api
         self.username = username
+        self.chat = chat
         self.now = now or (lambda: datetime.now(UTC))
         store.register(settings.subjects)
 
@@ -274,11 +275,45 @@ class Bot:
         )
         return True
 
+    def commands(self, ai=False):
+        result = [{"command": "sober", "description": "Открыть панель"}]
+        if ai and self.chat:
+            result.append({"command": "new", "description": "Новый разговор с ИИ"})
+        return result
+
+    def save_chat_turns(self):
+        if not self.chat:
+            return
+        for uid, question, answer in self.chat.drain():
+            self.store.add_chat_turn(uid, question, answer, self.now())
+
+    def converse(self, actor, message, text):
+        if ((message.get("reply_to_message") or {}).get("from") or {}).get("is_bot"):
+            # A late answer to an expired form must not turn into a model prompt.
+            self.send(message, "Эта форма уже закрыта. Откройте её заново: /sober")
+            return
+        self.save_chat_turns()
+        history = self.store.chat_history(actor, self.now())
+        state = self.chat.submit(actor, message["chat"]["id"], text, history)
+        if state == "busy":
+            self.send(message, "Я ещё отвечаю на прошлое сообщение. Подождите немного.")
+        elif state == "full":
+            self.send(message, "Сейчас много запросов. Попробуйте через минуту.")
+        else:
+            log.info("LLM: запрос поставлен в очередь")
+
     def handle(self, update):
         with operation(event_action(update)):
             return self._handle(update)
 
     def _handle(self, update):
+        stopped = update.get("stopped_message_generation")
+        if isinstance(stopped, dict):
+            if self.chat:
+                self.chat.stop(
+                    (stopped.get("chat") or {}).get("id"), stopped.get("draft_id")
+                )
+            return
         callback = update.get("callback_query")
         if callback:
             return self.callback(callback, update.get("update_id"))
@@ -338,6 +373,12 @@ class Bot:
                 )
                 return
             private = message["chat"]["type"] == "private"
+            subject = actor in {s.user_id for s in self.settings.subjects}
+            if private and base == "/new" and self.chat and subject:
+                self.save_chat_turns()
+                self.store.clear_chat(actor)
+                self.send(message, "Начинаем новый разговор: прошлую историю я забыл.")
+                return
             if base not in ({"/sober", "/start"} if private else {"/sober"}):
                 log.info(
                     "Команда пропущена: reason=command_not_supported; в группе доступна /sober"
@@ -347,9 +388,7 @@ class Bot:
                 self.api.call(
                     "setMyCommands",
                     {
-                        "commands": [
-                            {"command": "sober", "description": "Открыть панель"}
-                        ],
+                        "commands": self.commands(ai=subject),
                         "scope": {"type": "chat", "chat_id": actor},
                     },
                 )
@@ -400,6 +439,9 @@ class Bot:
             actor, message["chat"]["id"], self.thread(message), self.now()
         )
         if not dialog:
+            if self.chat and actor in {s.user_id for s in self.settings.subjects}:
+                self.converse(actor, message, text)
+                return
             log.info("Сообщение пропущено: reason=no_input_dialog")
             return
         if (
