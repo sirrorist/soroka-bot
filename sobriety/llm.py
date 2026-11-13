@@ -48,6 +48,7 @@ class LLMConfig:
     history_chars: int = 6000
     workers: int = 2
     timeout: float = 150.0
+    reasoning_effort: str = "low"
 
     @classmethod
     def from_env(cls):
@@ -76,6 +77,9 @@ class LLMConfig:
             return value
 
         system = os.environ.get("SOBRIETY_LLM_SYSTEM", "").strip() or DEFAULT_SYSTEM
+        effort = os.environ.get("SOBRIETY_LLM_REASONING_EFFORT", "").strip() or "low"
+        if effort not in ("low", "medium", "high", "none", "off"):
+            raise ValueError
         return cls(
             base_url.rstrip("/"),
             api_key,
@@ -83,6 +87,7 @@ class LLMConfig:
             system,
             number("SOBRIETY_LLM_MAX_TOKENS", 2000, 256, 8000),
             number("SOBRIETY_LLM_HISTORY_CHARS", 6000, 0, 60000),
+            reasoning_effort=effort,
         )
 
 
@@ -126,12 +131,14 @@ def stream(config, messages, stop, opener=None):
         "max_tokens": config.max_tokens,
         "stream": True,
         "stream_options": {"include_usage": True},
-        # The combo's models reason before answering and the reasoning counts
-        # against max_tokens; with a small budget the visible answer is empty.
-        # Measured 2026-11-12: "low" halves the reasoning, enable_thinking=false
-        # is ignored by part of the combo.
-        "reasoning_effort": "low",
     }
+    # The combo's models reason before answering and the reasoning counts
+    # against max_tokens; with a small budget the visible answer is empty.
+    # Measured 2026-11-12: "low" halves the reasoning, enable_thinking=false
+    # is ignored by part of the combo.
+    # "off" omits the key: Claude models then answer without a thinking block.
+    if config.reasoning_effort != "off":
+        body["reasoning_effort"] = config.reasoning_effort
     request = urllib.request.Request(
         config.base_url + "/chat/completions",
         data=json.dumps(body).encode(),

@@ -1,5 +1,6 @@
 """Private AI conversation: routing, history window, drafts, stop and failures."""
 
+import json
 import threading
 import time
 from datetime import timedelta
@@ -9,7 +10,7 @@ import pytest
 
 from sobriety.api import ApiError
 from sobriety.bot import Bot
-from sobriety.llm import ChatService, LLMConfig, RouterError, split, window
+from sobriety.llm import ChatService, LLMConfig, RouterError, split, stream, window
 from sobriety.settings import Binding, Settings, Subject
 from sobriety.store import CHAT_KEEP, CHAT_RETENTION, Store
 from tests.test_sobriety import MONDAY, FakeApi, message
@@ -261,3 +262,42 @@ def test_one_answer_per_user_and_stop_keeps_partial_answer():
         time.sleep(0.01)
     assert service.drain() == [(101, "вопрос", "часть …")]
     service.shutdown()
+
+
+def set_router_env(monkeypatch, effort=None):
+    monkeypatch.setenv("SOBRIETY_LLM_BASE_URL", "https://router.test/v1")
+    monkeypatch.setenv("SOBRIETY_LLM_API_KEY", "k")
+    monkeypatch.setenv("SOBRIETY_LLM_MODEL", "combo")
+    if effort is None:
+        monkeypatch.delenv("SOBRIETY_LLM_REASONING_EFFORT", raising=False)
+    else:
+        monkeypatch.setenv("SOBRIETY_LLM_REASONING_EFFORT", effort)
+
+
+def sent_body(config):
+    class Opener:
+        def open(self, request, timeout=None):
+            self.body = json.loads(request.data)
+            raise OSError("offline")
+
+    opener = Opener()
+    with pytest.raises(RouterError):
+        list(stream(config, [], threading.Event(), opener))
+    return opener.body
+
+
+@pytest.mark.parametrize("effort,expected", [(None, "low"), ("high", "high")])
+def test_reasoning_effort_is_sent(monkeypatch, effort, expected):
+    set_router_env(monkeypatch, effort)
+    assert sent_body(LLMConfig.from_env())["reasoning_effort"] == expected
+
+
+def test_reasoning_effort_off_omits_the_key(monkeypatch):
+    set_router_env(monkeypatch, "off")
+    assert "reasoning_effort" not in sent_body(LLMConfig.from_env())
+
+
+def test_bad_reasoning_effort_is_rejected(monkeypatch):
+    set_router_env(monkeypatch, "max")
+    with pytest.raises(ValueError):
+        LLMConfig.from_env()
